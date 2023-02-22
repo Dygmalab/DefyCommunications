@@ -1,3 +1,4 @@
+#ifdef KEYSCANNER
 #include <string.h>
 #include "SPI.hpp"
 #include <Keyscanner.hpp>
@@ -168,3 +169,4 @@ bool Communications::sendPacket(Packet packet) {
   queue_add_blocking(&txMessages, &packet);
   return true;
 }
+#endif
