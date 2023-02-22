@@ -13,8 +13,8 @@ struct SideInfo {
   bool port{false};
 };
 
-static SideInfo left{KeyScanner_communications_protocol::KEYSCANNER_DEFY_LEFT};
-static SideInfo right{KeyScanner_communications_protocol::KEYSCANNER_DEFY_RIGHT};
+static SideInfo left{Communications_protocol::KEYSCANNER_DEFY_LEFT};
+static SideInfo right{Communications_protocol::KEYSCANNER_DEFY_RIGHT};
 
 void checkActive(SideInfo &side);
 
@@ -71,14 +71,14 @@ void Communications::run() {
 
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
-  packet.header.device   = KeyScanner_communications_protocol::NEURON_DEFY_WIRED;
-  if (device_to_send == KeyScanner_communications_protocol::UNKNOWN) {
+  packet.header.device   = Communications_protocol::NEURON_DEFY_WIRED;
+  if (device_to_send == Communications_protocol::UNKNOWN) {
     if (port0.device != UNKNOWN)
       queue_add_blocking(&port0.tx_messages_, &packet);
     if (port1.device != UNKNOWN)
       queue_add_blocking(&port1.tx_messages_, &packet);
   }
-  if (device_to_send == KeyScanner_communications_protocol::KEYSCANNER_DEFY_LEFT) {
+  if (device_to_send == Communications_protocol::KEYSCANNER_DEFY_LEFT) {
     if (left.port) {
       if (port1.device != UNKNOWN)
         queue_add_blocking(&port1.tx_messages_, &packet);
@@ -87,7 +87,7 @@ bool Communications::sendPacket(Packet packet) {
         queue_add_blocking(&port0.tx_messages_, &packet);
     }
   }
-  if (device_to_send == KeyScanner_communications_protocol::KEYSCANNER_DEFY_RIGHT) {
+  if (device_to_send == Communications_protocol::KEYSCANNER_DEFY_RIGHT) {
     if (right.port) {
       if (port1.device != UNKNOWN)
         queue_add_blocking(&port1.tx_messages_, &packet);
@@ -106,7 +106,7 @@ void checkActive(SideInfo &side) {
   if (side.online && !now_active) {
     side.online   = now_active;
     SPISlave &spi = side.port ? port1 : port0;
-    spi.device    = KeyScanner_communications_protocol::UNKNOWN;
+    spi.device    = Communications_protocol::UNKNOWN;
     //Clear the packets as now the channel is no longer active
     Packet packet;
     while (!queue_is_empty(&spi.rx_messages_)) {

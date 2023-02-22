@@ -2,7 +2,7 @@
 #define KEYSCANNER_COMMUNICATIONS_PROTOCOL_H_
 #include "stdio.h"
 
-namespace KeyScanner_communications_protocol {
+namespace Communications_protocol {
 
 enum Devices : uint8_t {
   UNKNOWN = 0,

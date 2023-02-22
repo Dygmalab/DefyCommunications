@@ -4,7 +4,7 @@
 
 #include "KeyScanner_communications_protocol.h"
 #include "Callback.h"
-using namespace KeyScanner_communications_protocol;
+using namespace Communications_protocol;
 
 class Communications {
  public:
