@@ -2,7 +2,7 @@
 #ifndef _COMMUNICATIONS_H_
 #define _COMMUNICATIONS_H_
 
-#include "KeyScanner_communications_protocol.h"
+#include "Communications_protocol.h"
 #include "Callback.h"
 using namespace Communications_protocol;
 
