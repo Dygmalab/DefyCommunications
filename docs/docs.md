@@ -11,7 +11,6 @@ https://github.com/Dygmalab/DefyCommunications/blob/main/src/Communications_prot
 
 <div align="center">
   <img alt="UML Diagram" src="http://www.plantuml.com/plantuml/svg/fLF1Zjem43rlli8tsgvOhXKtRp90XB4ZEq3fghAymOMq9459wA7L_dljs0ifMlPINpBpPkRD-7ao6Y3s_4DdROC6eo0eLQ6Reyeq2gkYE9LvfjgyAXjvhAksoge3-XFSwV9KT75LRXiBt8MCKWXJY8mTnQBlJY6LB04goTaLCyRJdhy2Bc96ZJV3GivX8umP2ub9l09dHe1jjZ3P7IfZcW9VOUB1HnvFPoa58JnWMK9Ch_C8tW2tmGLEPCW8u-AVo996mAU4hQ-245qi-OZftBiB5a4lcc02QGgzOWAGcEyQpq4kZVKIUFqY_IlFj9FF3qlD015CDePmahu1TtSqE8KbPzHXwvXttQynugHOqZbbQ-hwPWVLD6YcrLRNNT_xp3qY6f-VqwBRRZG3-Xa3vC_zNZMog6ejpOhyr6PdnkYvgWwNX2R_RGjFUTb-bcs_RT9LkBPxDyBOpzBrLAsw5A8djC1VPCen5HDpVH5_1JIqvDNt3wxeupVBRlZj6GrGNEvrdRUgD9FN-k3MTfyVtLwx7BpRrNhNXTx8kR7n3rwmJyFXhP_YuQpUVx6yodsRn8lu7ecNzFNy1G00">
-<figcaption>Diagram class of Communications_protocol.h</figcaption>
 </div>
 
 ### Packet
