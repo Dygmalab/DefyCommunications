@@ -263,3 +263,126 @@ API endpoint to get the short leds status.
 **Status**: WORKING
 
 **Size**: 33 BYTE
+
+## Library
+
+### Callback
+
+https://github.com/Dygmalab/DefyCommunications/blob/main/src/Callback.h
+
+Callback is the library used to notify the system of the different commands received, it contains 2 classes Callback and
+BindingCallback.
+
+[Callback](#example-of-callback) takes as a diamond operator the variable of the callback, and in provides a method to
+add a function call back
+o to remove them, finally, and actualization can be notified with the () operator.
+
+[BindingCallback](#example-of-bindingcallbacks) is an extension of takes 2 arguments as a diamond operator first the
+variable of the and identifier
+could be an enum, integer or string and second the actual type associated with this identifier.
+The behaviour is a mix of a hashmap but with the output being the call of a callback.
+
+#### Example of Callback
+
+```cpp
+void notifySystem(bool now_active) {
+  printf("The system is now: ");
+  if (now_active)
+	printf("active\n");
+  else
+	printf("inactive\n");
+}
+
+int main() {
+  Callback<bool> active_callback;
+
+  active_callback.addListener(notifySystem);
+
+  active_callback.addListener([](bool now_active) {
+	printf("The motor is now: ");
+	if (now_active)
+	  printf("active\n");
+	else
+	  printf("inactive\n");
+  });
+
+  active_callback(false);
+  active_callback(true);
+}
+```
+
+#### Output
+
+```bash
+The system is now: inactive
+The motor is now: inactive
+The system is now: active
+The motor is now: active
+```
+
+#### Example of BindingCallbacks
+
+```cpp
+void checkBrakeValue(uint32_t brake) {
+  printf("Update of the force at the brake now at %u\n", brake);
+}
+
+int main() {
+  BindingCallbacks<Commands, uint32_t> bc;
+
+  bc.bind(MOTOR,
+		  ([](uint32_t speed) {
+			printf("Update of the speed of the motor now at %u\n", speed);
+		  }));
+
+  bc.bind(WHEEL,
+		  ([](uint32_t rotation) {
+			printf("Update of the rotation of the right wheel now at %u\n", rotation);
+		  }));
+
+  bc.bind(WHEEL,
+		  ([](uint32_t rotation) {
+			printf("Update of the rotation of the left wheel now at %u\n", rotation);
+		  }));
+
+  bc.bind(BRAKE, checkBrakeValue);
+
+  bc.call(MOTOR, 60);
+  bc.call(WHEEL, 90);
+  bc.call(BRAKE, 10);
+}
+```
+
+Keyscanner code using bindingCallbacks
+
+```cpp
+callbacks.bind(GET_SHORT_LED, [this](Packet p) {
+p.header.device = device;
+p.header.size   = IS31FL3743B::get_short_leds(p.data);
+sendPacket(p);
+});
+
+callbacks.bind(GET_OPEN_LED, [this](Packet p) {
+p.header.device = device;
+p.header.size   = IS31FL3743B::get_open_leds(p.data);
+sendPacket(p);
+});
+
+callbacks.bind(SET_BRIGHTNESS, [](Packet p) {
+LEDManagement::setMaxBrightness(p.data[0]);
+});
+
+callbacks.bind(SET_MODE_LED, [](Packet p) {
+LEDManagement::set_led_mode(p.data);
+});
+```
+
+#### Output
+
+```bash
+Update of the speed of the motor now at 60
+Update of the rotation of the right wheel now at 90
+Update of the rotation of the left wheel now at 90
+Update of the force at the brake now at 10
+```
+
