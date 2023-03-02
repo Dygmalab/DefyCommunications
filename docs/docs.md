@@ -83,7 +83,7 @@ The commands is the api of communication between the keyscanner and the neuron. 
 keyscanner will send a **CONNECTED** command to the Neuron to indicate that it is the first time the connection has been
 made.
 
-Each Xms a **IS_ALIVE** command will be sent to indicate that the communication is still open.
+Each 100ms a **IS_ALIVE** command will be sent to indicate that the communication is still open.
 And the rest of the commands are almost self explanatory. But will be explain in detail down below.
 
 ```cpp
@@ -112,5 +112,155 @@ GET_SHORT_LED,
 };
 ```
 
+#### IS_DEAD
 
+**Description**: If at some point some device receive this kind of commands is that a error in the communication has
+occur because this
+is not a valid command.
 
+#### IS_ALIVE
+
+**Description**: Default message to let the neuron know the communication is still open.
+
+**Status**: WORKING
+
+**Data size**: 0 BYTES
+
+#### CONNECTED
+
+**Description**: API endpoint to indicate that it is the first time a communication has establish.
+For example this is use to know that a new device its connected and send him the new layers colors.
+
+**Status**: WORKING
+
+**Data size**: 0 BYTES
+
+#### DISCONNECTED
+
+**Description**: API endpoint to indicate that it is the last communication and the keyscanner will shutdown.
+
+**Status**:**TBD**
+
+**Data size**: 0 BYTES
+
+#### SLEEP
+
+**Description**: API endpoint to indicate to the keyscanner that can enter in a sleep state.
+
+**Status**: WORKING
+
+**Data size**: 0 BYTES
+
+#### WAKE_UP
+
+API endpoint to indicate to the keyscanner that can needs to wake_up in a normal state.
+
+**Status**: WORKING
+
+**Data size**: 0 BYTES
+
+#### GET_VERSION
+
+**Description**: API endpoint that returns the actual version of the keyscanner.
+
+**Status**:**TBD**
+
+**Size**: 4 BYTES
+
+#### SET_ALIVE_INTERVAL
+
+API endpoint to configure the amount of time between IS_ALIVE commands.
+
+**Status**:**TBD**
+
+**Size**: 4 BYTES
+
+#### HAS_KEYS
+
+API endpoint to send the state of the key matrix with the actual key presses.
+
+**Status**: WORKING
+
+**Size**: 5 BYTES
+
+#### SET_KEYSCAN_INTERVAL
+
+API endpoint to configure the debouncing time.
+
+**Status**: WORKING
+
+**Size**: 1 BYTE
+
+#### SET_BRIGHTNESS
+
+API endpoint to configure the relative max brightness time.
+
+**Status**: WORKING
+
+**Size**: 1 BYTE
+
+#### SET_MODE_LED
+
+API endpoint to configure the actual led mode.
+
+**Status**: WORKING
+
+**Size**: Different for each led mode BYTE
+
+#### SET_LED
+
+API endpoint to configure the color of a single key.
+
+**Status**: TBD
+
+**Size**: 3 BYTES [ROW,COL,PALLET]
+
+#### SET_LED_BANK
+
+API endpoint to configure the color of a bank of LEDS.
+
+**Status**: TBD
+
+**Size**: X BYTES
+
+SET_PALETTE_COLORS
+
+#### SET_PALETTE_COLORS
+
+API endpoint to configure the palette colors.
+
+**Status**: WORKING
+
+**Size**: 16(MAX PALETTE COLORS)*4(RGBW) = 64 BYTES
+
+#### SET_LAYER_KEYMAP_COLORS
+
+API endpoint to configure the layer colors with palette of just the keymap.
+
+**Status**: WORKING
+
+**Size**: 1(Layer Index) + 35(KeyMap) = 36 BYTES
+
+#### SET_LAYER_UNDERGLOW_COLORS
+
+API endpoint to configure the layer colors with palette of just the underglow.
+
+**Status**: WORKING
+
+**Size**: 1(Layer Index) + 53(KeyMap) = 36 BYTES
+
+#### GET_OPEN_LED
+
+API endpoint to get the open leds status.
+
+**Status**: WORKING
+
+**Size**: 33 BYTES
+
+#### GET_SHORT_LED
+
+API endpoint to get the short leds status.
+
+**Status**: WORKING
+
+**Size**: 33 BYTE
