@@ -134,7 +134,7 @@ void Communications::init() {
   callbacks.bind(SET_LED_BANK, empty_func);
 
   callbacks.bind(SET_PALETTE_COLORS, [](Packet p) {
-    memcpy(LEDManagement::palette, &p.data[p.data[0]], p.header.size);
+    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
   });
 
   callbacks.bind(SET_LAYER_KEYMAP_COLORS, [](Packet p) {
