@@ -130,9 +130,6 @@ void Communications::init() {
   //TODO: SET_LED
   callbacks.bind(SET_LED, empty_func);
 
-  //TODO: SET_LED_BANK
-  callbacks.bind(SET_LED_BANK, empty_func);
-
   callbacks.bind(SET_PALETTE_COLORS, [](Packet p) {
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
   });
