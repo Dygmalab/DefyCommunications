@@ -9,33 +9,16 @@
 template<class... Arguments>
 class Callback {
  public:
-  using Function    = std::function<void(Arguments...)>;
-  using FunctionPtr = std::shared_ptr<Function>;
-  using Functions   = std::vector<FunctionPtr>;
+  using Function  = std::function<void(Arguments...)>;
+  using Functions = std::vector<Function>;
 
-  FunctionPtr addListener(const Function &f) {
-    FunctionPtr fp = std::make_shared<Function>(f);
-    functions_.push_back(fp);
-    return fp;
-  }
-
-  size_t numberOfListeners() const {
-    return functions_.size();
-  }
-
-  void removeListener(const FunctionPtr &fp) {
-    for (auto it = functions_.begin(); it != functions_.end();) {
-      if (*it == fp) {
-        functions_.erase(it);
-        return;
-      } else
-        ++it;
-    }
+  void addListener(const Function &f) {
+    functions_.push_back(f);
   }
 
   void operator()(const Arguments &...args) const {
     for (const auto &f : functions_)
-      f.get()->operator()(args...);
+      f.operator()(args...);
   }
 
  private:
@@ -45,28 +28,44 @@ class Callback {
 template<class Key, class Value>
 class BindingCallbacks {
  public:
-  using Function = typename Callback<Value>::Function;
-
-  typename Callback<Value>::FunctionPtr bind(const Key &command, const Function &function) {
-    if (callbacks.find(command) == callbacks.end())
-      callbacks.insert({command, std::unique_ptr<Callback<Value>>{new Callback<Value>}});
-    return callbacks[command]->addListener(function);
-  }
-
-  void unBind(const Key &command, const typename Callback<Value>::FunctionPtr &id) {
-    if (callbacks.find(command) == callbacks.end()) return;
-    callbacks[command]->removeListener(id);
-    if (callbacks[command]->numberOfListeners() == 0) {
-      callbacks.erase(command);
+  void bind(const Key &command, const typename Callback<Value>::Function &function) {
+    for (auto &item : callbacks) {
+      if (item.key == command) {
+        item.callback->addListener(function);
+        return;
+      }
+    }
+    callbacks.push_back({command, std::unique_ptr<Callback<Value>>{new Callback<Value>}});
+    for (auto &item : callbacks) {
+      if (item.key == command) {
+        item.callback->addListener(function);
+        return;
+      }
     }
   }
 
-  void call(const Key &key, const Value &value) {
-    if (callbacks.find(key) == callbacks.end()) return;
-    callbacks[key]->operator()(value);
+  void call(const Key &command, const Value &value) {
+    for (auto &item : callbacks) {
+      if (item.key == command) {
+        item.callback->operator()(value);
+      }
+    }
   }
 
-  std::unordered_map<Key, std::unique_ptr<Callback<Value>>> callbacks;
+  void operator()(const Key &command, const Value &value) {
+    for (auto &item : callbacks) {
+      if (item.key == command) {
+        item.callback->operator()(value);
+      }
+    }
+  }
+
+ private:
+  struct Join {
+    Key key;
+    std::unique_ptr<Callback<Value>> callback;
+  };
+  std::vector<Join> callbacks;
 };
 
 #endif
