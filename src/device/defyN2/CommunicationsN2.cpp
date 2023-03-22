@@ -1,4 +1,4 @@
-
+#ifdef NRF52833_XXAA
 #include "Communications.h"
 #include "SpiPort.h"
 #include "Time_counter.h"
@@ -146,3 +146,4 @@ void checkActive() {
 
 
 class Communications Communications;
+#endif
