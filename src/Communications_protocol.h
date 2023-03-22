@@ -30,13 +30,13 @@ enum Commands : uint8_t {
   SET_BRIGHTNESS = 20,
   SET_MODE_LED,
   SET_LED,
-  SET_LED_BANK,
   SET_PALETTE_COLORS,
   SET_LAYER_KEYMAP_COLORS,
   SET_LAYER_UNDERGLOW_COLORS,
   GET_OPEN_LED,
   GET_SHORT_LED,
 };
+
 static_assert(sizeof(Commands) == sizeof(uint8_t));
 
 struct Header {
@@ -47,9 +47,11 @@ struct Header {
     bool has_more_packets : 1;
   };
 };
+
 static_assert(sizeof(Header) == (sizeof(uint8_t) * 3));
 
-static const constexpr uint8_t MAX_TRANSFER_SIZE = 128;
+static const constexpr uint8_t MAX_TRANSFER_SIZE = 64;
+
 union Packet {
   struct {
     Header header;
@@ -59,5 +61,5 @@ union Packet {
 };
 static_assert(sizeof(Packet) == MAX_TRANSFER_SIZE);
 
-}  // namespace KeyScanner_communications_protocol
+}  // namespace Communications_protocol
 #endif
