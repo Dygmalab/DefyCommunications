@@ -15,35 +15,9 @@ Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
 bool need_polling;
 uint32_t last_time_communication_with_neuron;
-uint16_t keep_alive_timeout_neuron = 40;
+uint16_t keep_alive_timeout_neuron = 100;
 
 class Communications Communications;
-
-static void led_update_all(uint8_t *buf) {
-  for (size_t i = 0; i < 72; i++) {
-    uint8_t pointer = i * 3;
-    RGBW aux;
-    aux.g                         = buf[pointer];
-    aux.b                         = buf[pointer + 1];
-    aux.r                         = buf[pointer + 2];
-    aux.w                         = 0;
-    LEDManagement::render_leds[i] = aux;
-    // printf("%d-%d: RGBWUpdate! %d,%d,%d,%d \r\n", (i + bank * 8), bank, aux.r, aux.g, aux.b, aux.w);
-  }
-  LEDManagement::set_updated(true);
-}
-
-static void led_update_banks(uint8_t *buf, const uint8_t bank, uint8_t bufsiz) {
-  for (size_t i = 0; i < 8; i++) {
-    uint8_t pointer = i * 4;
-    RGBW aux;
-    aux.r                                    = buf[pointer];
-    aux.g                                    = buf[pointer + 1];
-    aux.b                                    = buf[pointer + 2];
-    aux.w                                    = buf[pointer + 3];
-    LEDManagement::render_leds[i + bank * 8] = aux;
-  }
-}
 
 void Communications::run() {
 
