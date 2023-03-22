@@ -1,0 +1,80 @@
+@startuml
+
+
+
+
+
+/' Objects '/
+
+namespace Communications_protocol {
+	enum Commands {
+		CONNECTED
+		DISCONNECTED
+		GET_OPEN_LED
+		GET_SHORT_LED
+		GET_VERSION
+		HAS_KEYS
+		IS_ALIVE
+		IS_DEAD
+		SET_ALIVE_INTERVAL
+		SET_BRIGHTNESS
+		SET_KEYSCAN_INTERVAL
+		SET_LAYER_KEYMAP_COLORS
+		SET_LAYER_UNDERGLOW_COLORS
+		SET_LED
+		SET_LED_BANK
+		SET_MODE_LED
+		SET_PALETTE_COLORS
+		SLEEP
+		WAKE_UP
+	}
+
+	enum Devices {
+		KEYSCANNER_DEFY_LEFT
+		KEYSCANNER_DEFY_RIGHT
+		NEURON_DEFY_WIRED
+		NEURON_DEFY_WIRELESS
+		UNKNOWN
+	}
+
+	class Header {
+		+command : Commands
+		+device : Devices
+        +has_more_packets : bool
+        +size : uint8_t
+	}
+
+	class Packet {
+		+header : Header
+		+data : uint8_t [ MAX_TRANSFER_SIZE -sizeof(Header)]
+	}
+}
+
+
+
+
+
+/' Inheritance relationships '/
+
+
+
+
+/' Aggregation relationships '/
+
+Communications_protocol.Header *-- Communications_protocol.Commands
+
+
+Communications_protocol.Header *-- Communications_protocol.Devices
+
+
+Communications_protocol.Packet *-- Communications_protocol.Header
+
+
+
+
+
+
+
+
+
+@enduml
