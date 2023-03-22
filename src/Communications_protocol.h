@@ -35,6 +35,12 @@ enum Commands : uint8_t {
   SET_LAYER_UNDERGLOW_COLORS,
   GET_OPEN_LED,
   GET_SHORT_LED,
+  //Config
+  SET_SPI_SPEED = 100,
+  SET_CLOCK_SPEED,
+  SET_LED_DRIVER_PULLUP,
+  SET_ENABLE_UNDERGLOW,
+  SET_ENABLE_LED_DRIVER,
 };
 
 static_assert(sizeof(Commands) == sizeof(uint8_t));

@@ -1,6 +1,7 @@
 #ifdef KEYSCANNER
 #include <string.h>
 #include "SPI.hpp"
+#include "Config.hpp"
 #include <Keyscanner.hpp>
 #include <IS31FL3743B.hpp>
 #include <LEDManagement.hpp>
@@ -55,12 +56,12 @@ void Communications::init() {
   callbacks.bind(IS_ALIVE, empty_func);
 
   callbacks.bind(SLEEP, [](Packet p) {
-    IS31FL3743B::setEnabled(false);
+    IS31FL3743B::set_enable(false);
     LEDManagement::set_enable_underGlow(false);
   });
 
   callbacks.bind(WAKE_UP, [](Packet p) {
-    IS31FL3743B::setEnabled(true);
+    IS31FL3743B::set_enable(true);
     LEDManagement::set_enable_underGlow(true);
     LEDManagement::set_updated(true);
   });
@@ -125,6 +126,68 @@ void Communications::init() {
     }
     LEDManagement::Layer &layer = LEDManagement::layers.at(layerIndex);
     memcpy(layer.underGlow_leds, &p.data[1], p.header.size - 1);
+  });
+
+  //Config
+  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet p) {
+    uint8_t enable;
+    memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
+    IS31FL3743B::set_enable(enable);
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.led_driver_enabled     = enable;
+    Configuration::set_configuration(configuration);
+  });
+  callbacks.bind(SET_LAYER_UNDERGLOW_COLORS, [](Packet p) {
+    uint8_t enable;
+    memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
+    gpio_put(UG_EN, enable);
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.underGlow_enabled      = enable;
+    Configuration::set_configuration(configuration);
+  });
+  callbacks.bind(SET_ALIVE_INTERVAL, [](Packet p) {
+    uint32_t pooling_rate_base;
+    uint32_t pooling_rate_variation;
+    memcpy(&pooling_rate_base, &rx_message.data[0], sizeof(uint32_t));
+    memcpy(&pooling_rate_variation, &rx_message.data[sizeof(uint32_t)], sizeof(uint32_t));
+    keep_alive_timeout_neuron                       = pooling_rate_base;
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.pooling_rate_base      = pooling_rate_base;
+    configuration.start_info.pooling_rate_variation = pooling_rate_variation;
+    printf("Sending alive interval base %lu and variation %lu\n", pooling_rate_base, pooling_rate_variation);
+    Configuration::set_configuration(configuration);
+  });
+  callbacks.bind(SET_SPI_SPEED, [](Packet p) {
+    uint32_t spi_speed_base;
+    uint32_t spi_speed_variation;
+    memcpy(&spi_speed_base, &rx_message.data[0], sizeof(uint32_t));
+    memcpy(&spi_speed_variation, &rx_message.data[sizeof(uint32_t)], sizeof(uint32_t));
+    SPI::set_baudrate(spi_speed_base);
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.spi_speed_base         = spi_speed_base;
+    configuration.start_info.spi_speed_variation    = spi_speed_variation;
+    printf("Sending spi speed base %lu and variation %lu\n", spi_speed_base, spi_speed_variation);
+    Configuration::set_configuration(configuration);
+  });
+
+  callbacks.bind(SET_CLOCK_SPEED, [](Packet p) {
+    uint32_t cpu_speed;
+    memcpy(&cpu_speed, &rx_message.data[0], sizeof(uint32_t));
+    set_sys_clock_khz(cpu_speed, true);
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.cpu_speed              = cpu_speed;
+    printf("Setting cpuSpeed to %lu\n", cpu_speed);
+    Configuration::set_configuration(configuration);
+  });
+
+  callbacks.bind(SET_LED_DRIVER_PULLUP, [](Packet p) {
+    uint8_t led_driver_pull_up;
+    memcpy(&led_driver_pull_up, &rx_message.data[0], sizeof(uint8_t));
+    Configuration::StartConfiguration configuration = Configuration::get_configuration();
+    configuration.start_info.pull_up_config         = led_driver_pull_up;
+    printf("Setting ledDriver in left side to %i\n", led_driver_pull_up);
+    Configuration::set_configuration(configuration);
+    IS31FL3743B::setPullUpRegister(led_driver_pull_up);
   });
 
   queue_init(&txMessages, sizeof(Communications_protocol::Packet), 20);
