@@ -7,6 +7,7 @@
 #include <LEDManagement.hpp>
 #include "Communications.h"
 #include "pico/util/queue.h"
+#include "hardware/clocks.h"
 
 constexpr uint8_t SIDE_ID = 25;
 queue_t txMessages;
@@ -25,11 +26,17 @@ void Communications::run() {
   if (to_ms_since_boot(get_absolute_time()) - last_time_communication_with_neuron > keep_alive_timeout_neuron || need_polling || KeyScanner.newKey()) {
     last_time_communication_with_neuron = to_ms_since_boot(get_absolute_time());
     Packet packet{};
-    packet.header.command = IS_ALIVE;
     if (KeyScanner.newKey()) {
       KeyScanner.keyState(false);
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
+    } else {
+      packet.header.command                  = IS_ALIVE;
+      Configuration::StartInfo configuration = Configuration::get_configuration().start_info;
+      configuration.spi_speed_base           = SPI::get_baudrate();
+      configuration.cpu_speed                = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
+      packet.header.size                 = sizeof(Configuration::StartInfo);
+      memcpy(packet.data, &configuration, sizeof(configuration));
     }
     sendPacket(packet);
   }
@@ -137,7 +144,7 @@ void Communications::init() {
     configuration.start_info.led_driver_enabled     = enable;
     Configuration::set_configuration(configuration);
   });
-  callbacks.bind(SET_LAYER_UNDERGLOW_COLORS, [](Packet p) {
+  callbacks.bind(SET_ENABLE_UNDERGLOW, [](Packet p) {
     uint8_t enable;
     memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
     gpio_put(UG_EN, enable);
