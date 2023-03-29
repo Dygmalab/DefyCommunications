@@ -1,4 +1,4 @@
-#ifdef NRF52833_XXAA
+#ifdef NRF52_ARCH
 #include "Communications.h"
 #include "SpiPort.h"
 #include "Time_counter.h"
@@ -25,7 +25,7 @@ static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
 #endif
 
-constexpr static uint32_t timeout = 300;
+constexpr static uint32_t timeout = 200;
 
 void checkActive();
 
