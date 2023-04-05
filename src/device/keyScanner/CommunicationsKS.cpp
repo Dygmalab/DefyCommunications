@@ -8,6 +8,7 @@
 #include "Communications.h"
 #include "pico/util/queue.h"
 #include "hardware/clocks.h"
+#include "RFLinkLayer.hpp"
 
 constexpr uint8_t SIDE_ID = 25;
 queue_t txMessages;
@@ -16,15 +17,20 @@ Communications_protocol::Packet tx_message;
 Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
 bool need_polling;
-uint32_t last_time_communication_with_neuron;
-uint16_t keep_alive_timeout_neuron = 100;
+uint32_t last_time_communication;
+uint16_t keep_alive_timeout = 100;
+
+bool has_neuron_connection              = false;
+uint32_t last_time_communication_neuron = 0;
+bool has_rf_connection                  = false;
+uint32_t last_time_communication_rf     = 0;
 
 class Communications Communications;
 
 void Communications::run() {
-
-  if (to_ms_since_boot(get_absolute_time()) - last_time_communication_with_neuron > keep_alive_timeout_neuron || need_polling || KeyScanner.newKey()) {
-    last_time_communication_with_neuron = to_ms_since_boot(get_absolute_time());
+  uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+  if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
+    last_time_communication = ms_since_enter;
     Packet packet{};
     if (KeyScanner.newKey()) {
       KeyScanner.keyState(false);
@@ -35,7 +41,7 @@ void Communications::run() {
       Configuration::StartInfo configuration = Configuration::get_configuration().start_info;
       configuration.spi_speed_base           = SPI::get_baudrate();
       configuration.cpu_speed                = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
-      packet.header.size                 = sizeof(Configuration::StartInfo);
+      packet.header.size                     = sizeof(Configuration::StartInfo);
       memcpy(packet.data, &configuration, sizeof(configuration));
     }
     sendPacket(packet);
@@ -43,9 +49,35 @@ void Communications::run() {
 
   if (!queue_is_empty(&txMessages)) {
     queue_remove_blocking(&txMessages, &tx_message);
-    SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
-    need_polling = rx_message.header.has_more_packets;
-    callbacks.call(rx_message.header.command, rx_message);
+
+    if ((!has_neuron_connection && !has_rf_connection) || has_neuron_connection) {
+      //Wired mode has priority
+      SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
+      //If we have a response then update the time.
+      if (rx_message.header.command != IS_DEAD) {
+        last_time_communication_neuron = ms_since_enter;
+        need_polling                   = rx_message.header.has_more_packets;
+        callbacks.call(rx_message.header.command, rx_message);
+        return;
+      }
+    }
+
+    //If the communication with the neuron could not be established, try to send to the message to the RF
+    //TODO: send message to RF
+    if (RFLinkLayer::isRfConnected()) {
+      //Send data to RF
+    }
+  }
+
+  if (has_neuron_connection && last_time_communication_neuron - ms_since_enter > 900) {
+    has_neuron_connection = false;
+    LEDManagement::set_mode_disconnected();
+    //Clean queue
+  }
+  if (has_rf_connection && last_time_communication_rf - ms_since_enter > 900) {
+    has_rf_connection = false;
+    LEDManagement::set_mode_disconnected();
+    //Clean queue
   }
 }
 
@@ -57,10 +89,27 @@ void Communications::init() {
   }
 
   auto empty_func = [](Packet p) {};
-  callbacks.bind(IS_DEAD, empty_func);
 
-  //TODO: Is alive
-  callbacks.bind(IS_ALIVE, empty_func);
+  callbacks.bind(IS_ALIVE, [this](Packet p) {
+    p.header.device  = device;
+    p.header.command = Communications_protocol::CONNECTED;
+    sendPacket(p);
+  });
+
+  callbacks.bind(CONNECTED, [](Packet p) {
+    has_neuron_connection = false;
+    has_rf_connection     = false;
+
+    if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
+      has_rf_connection = true;
+    }
+    if (p.header.device == Communications_protocol::NEURON_DEFY) {
+      has_neuron_connection = true;
+    }
+    if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
+      has_neuron_connection = true;
+    }
+  });
 
   callbacks.bind(SLEEP, [](Packet p) {
     IS31FL3743B::set_enable(false);
@@ -157,7 +206,7 @@ void Communications::init() {
     uint32_t pooling_rate_variation;
     memcpy(&pooling_rate_base, &rx_message.data[0], sizeof(uint32_t));
     memcpy(&pooling_rate_variation, &rx_message.data[sizeof(uint32_t)], sizeof(uint32_t));
-    keep_alive_timeout_neuron                       = pooling_rate_base;
+    keep_alive_timeout                              = pooling_rate_base;
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
     configuration.start_info.pooling_rate_base      = pooling_rate_base;
     configuration.start_info.pooling_rate_variation = pooling_rate_variation;
@@ -199,10 +248,6 @@ void Communications::init() {
 
   queue_init(&txMessages, sizeof(Communications_protocol::Packet), 20);
   queue_init(&rxMessages, sizeof(Communications_protocol::Packet), 20);
-  Packet packet{};
-  packet.header.device  = device;
-  packet.header.command = Communications_protocol::CONNECTED;
-  sendPacket(packet);
 }
 
 bool Communications::sendPacket(Packet packet) {
