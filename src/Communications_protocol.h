@@ -24,7 +24,7 @@ enum Commands : uint8_t {
   DISCONNECTED,
   SLEEP,
   WAKE_UP,
-  GET_VERSION,
+  VERSION,
   SET_ALIVE_INTERVAL,
   //Keys
   HAS_KEYS = 10,

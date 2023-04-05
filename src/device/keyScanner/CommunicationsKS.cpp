@@ -122,8 +122,11 @@ void Communications::init() {
     LEDManagement::set_updated(true);
   });
 
-  //TODO: Get version
-  callbacks.bind(GET_VERSION, empty_func);
+  callbacks.bind(VERSION, [this](Packet p) {
+    p.header.device = device;
+    p.data[0]       = 1;
+    sendPacket(p);
+  });
 
   //TODO: Alive inverval
   callbacks.bind(SET_ALIVE_INTERVAL, empty_func);
