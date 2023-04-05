@@ -8,11 +8,8 @@ enum Devices : uint8_t {
   UNKNOWN = 0,
   KEYSCANNER_DEFY_LEFT,
   KEYSCANNER_DEFY_RIGHT,
-  RF_DEFY_LEFT,
-  RF_DEFY_RIGHT,
-  NEURON_DEFY,
-  RF_NEURON_DEFY,
-  WIRED_NEURON_DEFY,
+  NEURON_DEFY_WIRED,
+  NEURON_DEFY_WIRELESS,
 };
 
 static_assert(sizeof(Devices) == sizeof(uint8_t));
