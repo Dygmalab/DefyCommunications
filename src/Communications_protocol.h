@@ -55,9 +55,10 @@ struct Header {
     uint8_t size : 7;
     bool has_more_packets : 1;
   };
+  uint8_t crc;
 };
 
-static_assert(sizeof(Header) == (sizeof(uint8_t) * 3));
+static_assert(sizeof(Header) == (sizeof(uint8_t) * 4));
 
 static const constexpr uint8_t MAX_TRANSFER_SIZE = 64;
 
