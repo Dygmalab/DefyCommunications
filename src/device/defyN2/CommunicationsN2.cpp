@@ -75,7 +75,7 @@ void Communications::run() {
 
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
-  packet.header.device   = NEURON_DEFY_WIRED;
+  packet.header.device   = Communications_protocol::NEURON_DEFY;
   if (device_to_send == UNKNOWN) {
 #if COMPILE_SPI0_SUPPORT
     if (spiPort0Device != UNKNOWN)
