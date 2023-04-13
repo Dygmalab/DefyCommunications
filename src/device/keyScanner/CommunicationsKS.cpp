@@ -141,6 +141,9 @@ void Communications::init() {
       }
       p.header.device  = device;
       p.header.command = Communications_protocol::CONNECTED;
+      uint32_t version = FMW_VERSION;
+      memcpy(p.data, &version, sizeof(version));
+      p.header.size = sizeof(version);
       sendPacket(p);
     }
   });
@@ -178,8 +181,9 @@ void Communications::init() {
   });
 
   callbacks.bind(VERSION, [this](Packet p) {
-    p.data[0]     = 1;
-    p.header.size = 1;
+    uint32_t version = FMW_VERSION;
+    memcpy(p.data, &version, sizeof(version));
+    p.header.size = sizeof(version);
     sendPacket(p);
   });
 
