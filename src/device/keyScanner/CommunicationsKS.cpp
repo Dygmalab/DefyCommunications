@@ -78,13 +78,12 @@ void Communications::run() {
     }
 
     //If the communication with the neuron could not be established, try to send to the message to the RF
-    //TODO: send message to RF
-    if (RFLinkLayer::isRfConnected()) {
+    if (RFGWCommunication::isEnabled()) {
       RFGWCommunication::sendPacket(tx_message);
     }
   }
 
-  if (RFLinkLayer::isRfConnected()) {
+  if (RFGWCommunication::isEnabled()) {
     if (RFGWCommunication::hasPackets()) {
       rx_message            = RFGWCommunication::getPacket();
       uint8_t rx_crc        = rx_message.header.crc;
@@ -107,6 +106,7 @@ void Communications::run() {
     //Clean queue
     cleanQueues();
   }
+
   if (has_rf_connection && ms_since_enter - last_time_communication_rf > 900) {
     has_rf_connection = false;
     LEDManagement::set_mode_disconnected();
