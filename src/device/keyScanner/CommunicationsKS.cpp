@@ -169,6 +169,13 @@ void Communications::init() {
     }
   });
 
+  callbacks.bind(DISCONNECTED, [](Packet p) {
+    has_neuron_connection = false;
+    has_rf_connection     = false;
+    cleanQueues();
+    RFGWCommunication::cleanMessages();
+  });
+
   callbacks.bind(SLEEP, [](Packet p) {
     IS31FL3743B::set_enable(false);
     LEDManagement::set_enable_underGlow(false);
