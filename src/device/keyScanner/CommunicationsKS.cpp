@@ -8,7 +8,6 @@
 #include "Communications.h"
 #include "pico/util/queue.h"
 #include "hardware/clocks.h"
-#include "RFLinkLayer.hpp"
 #include "RFGW_communications.h"
 #include "CRC.h"
 
@@ -18,9 +17,9 @@ queue_t rxMessages;
 Communications_protocol::Packet tx_message;
 Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
-bool need_polling;
+bool need_polling{false};
 uint32_t last_time_communication;
-uint16_t keep_alive_timeout = 100;
+uint16_t keep_alive_timeout = 150;
 
 //TODO: Create enum state for connections
 uint8_t has_neuron_connection           = 0;
@@ -35,12 +34,26 @@ void cleanQueues() {
     queue_remove_blocking(&txMessages, &tx_message);
   }
   while (!queue_is_empty(&rxMessages)) {
-    queue_remove_blocking(&txMessages, &tx_message);
+    queue_remove_blocking(&rxMessages, &rx_message);
   }
 }
 
 void Communications::run() {
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+
+  if (RFGWCommunication::isEnabled() && RFGWCommunication::hasPackets()) {
+    rx_message            = RFGWCommunication::getPacket();
+    need_polling          = false;
+    uint8_t rx_crc        = rx_message.header.crc;
+    rx_message.header.crc = 0;
+    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
+    if (rx_message.header.command != IS_DEAD) {
+      last_time_communication_rf = ms_since_enter;
+      callbacks.call(rx_message.header.command, rx_message);
+      return;
+    }
+  }
+
   if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     last_time_communication = ms_since_enter;
     Packet packet{};
@@ -49,12 +62,8 @@ void Communications::run() {
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
     } else {
-      packet.header.command                  = IS_ALIVE;
-      Configuration::StartInfo configuration = Configuration::get_configuration().start_info;
-      configuration.spi_speed_base           = SPI::get_baudrate();
-      configuration.cpu_speed                = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
-      packet.header.size                     = sizeof(Configuration::StartInfo);
-      memcpy(packet.data, &configuration, sizeof(configuration));
+      packet.header.command = IS_ALIVE;
+      packet.header.size    = 0;
     }
     sendPacket(packet);
   }
@@ -82,22 +91,6 @@ void Communications::run() {
       RFGWCommunication::sendPacket(tx_message);
     }
   }
-
-  if (RFGWCommunication::isEnabled()) {
-    if (RFGWCommunication::hasPackets()) {
-      rx_message            = RFGWCommunication::getPacket();
-      uint8_t rx_crc        = rx_message.header.crc;
-      rx_message.header.crc = 0;
-      uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
-      if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
-        last_time_communication_rf = ms_since_enter;
-        need_polling               = rx_message.header.has_more_packets;
-        callbacks.call(rx_message.header.command, rx_message);
-        return;
-      }
-    }
-  }
-
 
   if (has_neuron_connection && ms_since_enter - last_time_communication_neuron > 900) {
     printf("Neuron disconnected\n");

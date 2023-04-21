@@ -60,7 +60,7 @@ struct Header {
 
 static_assert(sizeof(Header) == (sizeof(uint8_t) * 4));
 
-static const constexpr uint8_t MAX_TRANSFER_SIZE = 64;
+static const constexpr uint8_t MAX_TRANSFER_SIZE = 32;
 
 union Packet {
   struct {
