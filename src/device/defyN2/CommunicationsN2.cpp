@@ -28,7 +28,7 @@ static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
 #endif
 
-constexpr static uint32_t timeout = 400;
+constexpr static uint32_t TIMEOUT = 400;
 
 void checkActive();
 
@@ -58,23 +58,24 @@ class RFGW_parser {
     if (pipe_recv_loadsize) {
       left.connected             = true;
       left.lastTimeCommunication = time_counter.get_millis();
-      Packet packet{};
-      rfgw_pipe_recv(RFGW_PIPE_ID_KEYSCANNER_LEFT, packet.buf, pipe_recv_loadsize);
-      Communications.callbacks.call(packet.header.command, packet);
+      rfgw_pipe_recv(RFGW_PIPE_ID_KEYSCANNER_LEFT, &left.rx_buffer[left.rx_buffer_last_index], pipe_recv_loadsize);
+      left.rx_buffer_last_index += pipe_recv_loadsize;
+      left.checkBuffer();
       if (left.tx_messages.empty()) {
+        Packet packet{};
         packet                = {};
         packet.header.device  = Communications_protocol::RF_DEFY_LEFT;
         packet.header.command = Communications_protocol::IS_ALIVE;
         packet.header.size    = 0;
         packet.header.crc     = 0;
-        left.tx_messages.push(packet);
+        left.tx_messages.emplace(packet);
       }
     }
 
     if (!left.tx_messages.empty()) {
-      Communications_protocol::Packet &packet = left.tx_messages.front();
-      if (pipe_send_loadsize>=sizeof(Header)+packet.header.size) {
-        rfgw_pipe_send(RFGW_PIPE_ID_KEYSCANNER_LEFT, (uint8_t *)packet.buf, sizeof(Header)+packet.header.size);
+      Side::PacketSender &packet_sender = left.tx_messages.front();
+      if (pipe_send_loadsize >= sizeof(Header) + packet_sender.packet.header.size + 1) {
+        rfgw_pipe_send(RFGW_PIPE_ID_KEYSCANNER_LEFT, (uint8_t *)packet_sender.buf, sizeof(Header) + packet_sender.packet.header.size + 1);
         left.tx_messages.pop();
       }
     }
@@ -82,13 +83,64 @@ class RFGW_parser {
 
 
   struct Side {
-    Packet packet{};
+    uint32_t checkPacketInBuffer(uint32_t startIndex, Packet &packet) {
+      uint32_t bufferIndex;
+      uint32_t i;
+      for (i = 0; i < sizeof(Header); ++i) {
+        bufferIndex = i + startIndex;
+        if (bufferIndex >= rx_buffer_last_index) return 0;
+        packet.buf[i] = rx_buffer[bufferIndex];
+      }
+      startIndex = i + startIndex;
+      for (i = 0; i < packet.header.size; ++i) {
+        bufferIndex = i + startIndex;
+        if (bufferIndex >= rx_buffer_last_index) return 0;
+        packet.data[i] = rx_buffer[bufferIndex];
+      }
+      //TODO: check crc
+      return i + startIndex;
+    }
+
+    void checkBuffer() {
+      uint32_t i = 0;
+      do {
+        if (rx_buffer[i++] == 0b10101010) {
+          Packet packet{};
+          volatile uint32_t sizeOfPacket = checkPacketInBuffer(i, packet);
+          if (sizeOfPacket != 0) {
+            Communications.callbacks.call(packet.header.command, packet);
+            memset(rx_buffer, 0, sizeOfPacket);
+            memcpy(rx_buffer, &rx_buffer[sizeOfPacket], rx_buffer_last_index - sizeOfPacket);
+            memset(&rx_buffer[sizeOfPacket], 0, rx_buffer_last_index - sizeOfPacket);
+            //Start from the beginning
+            i                    = 0;
+            rx_buffer_last_index = rx_buffer_last_index - sizeOfPacket;
+          }
+        }
+      } while (i < rx_buffer_last_index);
+    }
+
+
+    struct PacketSender {
+      explicit PacketSender(Packet p)
+        : packet(p){};
+      union {
+        struct {
+          uint8_t flag = 0b10101010;
+          Packet packet;
+        };
+        uint8_t buf[sizeof(packet) + 1];
+      };
+    };
+
     bool connected = false;
     uint32_t lastTimeCommunication{0};
-    std::queue<Packet> tx_messages;
+    uint8_t rx_buffer[512]{};
+    uint16_t rx_buffer_last_index{0};
+    std::queue<PacketSender> tx_messages;
     void sendPacket(Packet &packet) {
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
-      tx_messages.push(packet);
+      tx_messages.emplace(packet);
     };
   };
   static Side left;
@@ -110,6 +162,13 @@ void Communications::init() {
   spiPort2.init();
 #endif
   RFGW_parser::init();
+
+  callbacks.bind(CONNECTED, [this](Packet p) {
+    p.header.size    = 0;
+    p.header.device  = p.header.device;
+    p.header.command = CONNECTED;
+    sendPacket(p);
+  });
 }
 
 void Communications::run() {
@@ -195,10 +254,11 @@ void checkActive() {
 #if COMPILE_SPI1_SUPPORT
   if (spiPort1Device == UNKNOWN)
     return;
-  now_active = time_counter.get_millis() - spiPort1LastCommunication <= timeout;
+  now_active = time_counter.get_millis() - spiPort1LastCommunication <= TIMEOUT;
   if (!now_active) {
     spiPort1Device = UNKNOWN;
-    while (spiPort2.readPacket(packet)) {}
+    //Remove all the left packets at disconnections
+    while (spiPort1.readPacket(packet)) {}
     return;
   }
 #endif
@@ -206,14 +266,15 @@ void checkActive() {
 #if COMPILE_SPI2_SUPPORT
   if (spiPort2Device == UNKNOWN)
     return;
-  now_active = time_counter.get_millis() - spiPort2LastCommunication <= timeout;
+  now_active = time_counter.get_millis() - spiPort2LastCommunication <= TIMEOUT;
   if (!now_active) {
     spiPort2Device = UNKNOWN;
+    //Remove all the left packets at disconnections
     while (spiPort2.readPacket(packet)) {}
     return;
   }
 #endif
-  now_active = time_counter.get_millis() - RFGW_parser::left.lastTimeCommunication <= timeout;
+  now_active = time_counter.get_millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
   if (!now_active) {
     RFGW_parser::left.connected = false;
     while (!RFGW_parser::left.tx_messages.empty()) {
