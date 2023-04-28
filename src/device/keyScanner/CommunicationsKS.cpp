@@ -25,7 +25,6 @@ uint16_t keep_alive_timeout = 150;
 uint8_t has_neuron_connection           = 0;
 uint32_t last_time_communication_neuron = 0;
 uint8_t has_rf_connection               = 0;
-uint32_t last_time_communication_rf     = 0;
 
 class Communications Communications;
 
@@ -40,20 +39,6 @@ void cleanQueues() {
 
 void Communications::run() {
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
-
-  if (RFGWCommunication::isEnabled() && RFGWCommunication::hasPackets()) {
-    rx_message            = RFGWCommunication::getPacket();
-    need_polling          = false;
-    uint8_t rx_crc        = rx_message.header.crc;
-    rx_message.header.crc = 0;
-    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
-    if (rx_message.header.command != IS_DEAD) {
-      last_time_communication_rf = ms_since_enter;
-      callbacks.call(rx_message.header.command, rx_message);
-      return;
-    }
-  }
-
   if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     last_time_communication = ms_since_enter;
     Packet packet{};
@@ -71,19 +56,17 @@ void Communications::run() {
   if (!queue_is_empty(&txMessages)) {
     queue_remove_blocking(&txMessages, &tx_message);
 
-    if ((!has_neuron_connection && !has_rf_connection) || has_neuron_connection) {
-      //Wired mode has more priority
-      SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
-      //If we have a response then update the time.
-      uint8_t rx_crc        = rx_message.header.crc;
-      rx_message.header.crc = 0;
-      uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
-      if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
-        last_time_communication_neuron = ms_since_enter;
-        need_polling                   = rx_message.header.has_more_packets;
-        callbacks.call(rx_message.header.command, rx_message);
-        return;
-      }
+    //Wired mode has more priority
+    SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
+    //If we have a response then update the time.
+    uint8_t rx_crc        = rx_message.header.crc;
+    rx_message.header.crc = 0;
+    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
+    if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
+      last_time_communication_neuron = ms_since_enter;
+      need_polling                   = rx_message.header.has_more_packets;
+      callbacks.call(rx_message.header.command, rx_message);
+      return;
     }
 
     //If the communication with the neuron could not be established, try to send to the message to the RF
@@ -100,12 +83,13 @@ void Communications::run() {
     cleanQueues();
   }
 
-  if (has_rf_connection && ms_since_enter - last_time_communication_rf > 900) {
+  if (has_rf_connection && ms_since_enter - RFGWCommunication::last_time_communication_rf > 900) {
+    printf("Neuron rf disconnected\n");
     has_rf_connection = false;
     LEDManagement::set_mode_disconnected();
-    //Clean queue
+    //    Clean queues
     cleanQueues();
-    RFGWCommunication::cleanMessages();
+    //        RFGWCommunication::cleanMessages();
   }
 }
 
@@ -141,24 +125,36 @@ void Communications::init() {
     }
   });
 
-  callbacks.bind(CONNECTED, [](Packet p) {
+  callbacks.bind(CONNECTED, [this](Packet p) {
     has_neuron_connection = false;
     has_rf_connection     = false;
 
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
       has_rf_connection = 2;
       printf("RF connected\n");
-      return;
     }
     if (p.header.device == Communications_protocol::NEURON_DEFY) {
       has_neuron_connection = 2;
       printf("Neuron connected\n");
-      return;
     }
     if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
       has_neuron_connection = 2;
       printf("Wired Neuron connected\n");
-      return;
+    }
+    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
+      p.header.size    = 0;
+      p.header.command = BRIGHTNESS;
+      sendPacket(p);
+      p.header.command = PALETTE_COLORS;
+      sendPacket(p);
+      p.header.command = LAYER_KEYMAP_COLORS;
+      sendPacket(p);
+      p.header.command = LAYER_UNDERGLOW_COLORS;
+      sendPacket(p);
+      p.header.command = MODE_LED;
+      sendPacket(p);
+    } else {
+      LEDManagement::set_mode_connected();
     }
   });
 
@@ -166,7 +162,6 @@ void Communications::init() {
     has_neuron_connection = false;
     has_rf_connection     = false;
     cleanQueues();
-    RFGWCommunication::cleanMessages();
   });
 
   callbacks.bind(SLEEP, [](Packet p) {
@@ -191,7 +186,7 @@ void Communications::init() {
     sendPacket(p);
   });
 
-  callbacks.bind(SET_KEYSCAN_INTERVAL, [](Packet p) {
+  callbacks.bind(KEYSCAN_INTERVAL, [](Packet p) {
     KeyScanner.keyScanInterval(p.data[0]);
   });
 
@@ -205,38 +200,75 @@ void Communications::init() {
     sendPacket(p);
   });
 
-  callbacks.bind(SET_BRIGHTNESS, [](Packet p) {
+  callbacks.bind(BRIGHTNESS, [](Packet p) {
     LEDManagement::setMaxBrightness(p.data[0]);
   });
 
-  callbacks.bind(SET_MODE_LED, [](Packet p) {
-    LEDManagement::set_led_mode(p.data);
+  callbacks.bind(MODE_LED, [](Packet p) {
+    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
+      LEDManagement::set_led_mode(p.data);
+    }
   });
 
   //TODO: SET_LED
-  callbacks.bind(SET_LED, empty_func);
+  callbacks.bind(LED, empty_func);
 
-  callbacks.bind(SET_PALETTE_COLORS, [](Packet p) {
+  callbacks.bind(PALETTE_COLORS, [](Packet p) {
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
   });
 
-  callbacks.bind(SET_LAYER_KEYMAP_COLORS, [](Packet p) {
+  callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet p) {
     uint8_t layerIndex = p.data[0];
     if (layerIndex < LEDManagement::layers.size()) {
-      LEDManagement::layers.push_back({});
+      LEDManagement::layers.emplace_back();
     }
-
+    union PaletteJoiner {
+      struct {
+        uint8_t firstColor : 4;
+        uint8_t secondColor : 4;
+      };
+      uint8_t paletteColor;
+    };
     LEDManagement::Layer &layer = LEDManagement::layers.at(layerIndex);
-    memcpy(layer.keyMap_leds, &p.data[1], p.header.size - 1);
+    PaletteJoiner message[p.header.size - 1];
+    memcpy(message, &p.data[1], p.header.size - 1);
+    uint8_t k{};
+    bool swap = true;
+    for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j) {
+      if (swap) {
+        layer.keyMap_leds[j] = message[k].firstColor;
+      } else {
+        layer.keyMap_leds[j] = message[k++].secondColor;
+      }
+      swap = !swap;
+    }
   });
 
-  callbacks.bind(SET_LAYER_UNDERGLOW_COLORS, [](Packet p) {
+  callbacks.bind(LAYER_UNDERGLOW_COLORS, [](Packet p) {
     uint8_t layerIndex = p.data[0];
     if (layerIndex < LEDManagement::layers.size()) {
-      LEDManagement::layers.push_back({});
+      LEDManagement::layers.emplace_back();
     }
+    union PaletteJoiner {
+      struct {
+        uint8_t firstColor : 4;
+        uint8_t secondColor : 4;
+      };
+      uint8_t paletteColor;
+    };
     LEDManagement::Layer &layer = LEDManagement::layers.at(layerIndex);
-    memcpy(layer.underGlow_leds, &p.data[1], p.header.size - 1);
+    PaletteJoiner message[p.header.size - 1];
+    memcpy(message, &p.data[1], p.header.size - 1);
+    uint8_t k{};
+    bool swap = true;
+    for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j) {
+      if (swap) {
+        layer.underGlow_leds[j] = message[k].firstColor;
+      } else {
+        layer.underGlow_leds[j] = message[k++].secondColor;
+      }
+      swap = !swap;
+    }
   });
 
   //Config
@@ -256,7 +288,8 @@ void Communications::init() {
     configuration.start_info.underGlow_enabled      = enable;
     Configuration::set_configuration(configuration);
   });
-  callbacks.bind(SET_ALIVE_INTERVAL, [](Packet p) {
+
+  callbacks.bind(ALIVE_INTERVAL, [](Packet p) {
     uint32_t pooling_rate_base;
     uint32_t pooling_rate_variation;
     memcpy(&pooling_rate_base, &rx_message.data[0], sizeof(uint32_t));
