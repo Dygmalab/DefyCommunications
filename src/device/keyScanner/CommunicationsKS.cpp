@@ -56,19 +56,17 @@ void Communications::run() {
   if (!queue_is_empty(&txMessages)) {
     queue_remove_blocking(&txMessages, &tx_message);
 
-    if ((!has_neuron_connection && !has_rf_connection) || has_neuron_connection) {
-      //Wired mode has more priority
-      SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
-      //If we have a response then update the time.
-      uint8_t rx_crc        = rx_message.header.crc;
-      rx_message.header.crc = 0;
-      uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
-      if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
-        last_time_communication_neuron = ms_since_enter;
-        need_polling                   = rx_message.header.has_more_packets;
-        callbacks.call(rx_message.header.command, rx_message);
-        return;
-      }
+    //Wired mode has more priority
+    SPI::read_write_buffer(SPI::CSList::CSN2, tx_message.buf, rx_message.buf, sizeof(Packet));
+    //If we have a response then update the time.
+    uint8_t rx_crc        = rx_message.header.crc;
+    rx_message.header.crc = 0;
+    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
+    if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
+      last_time_communication_neuron = ms_since_enter;
+      need_polling                   = rx_message.header.has_more_packets;
+      callbacks.call(rx_message.header.command, rx_message);
+      return;
     }
 
     //If the communication with the neuron could not be established, try to send to the message to the RF
@@ -86,11 +84,12 @@ void Communications::run() {
   }
 
   if (has_rf_connection && ms_since_enter - RFGWCommunication::last_time_communication_rf > 900) {
-    //        has_rf_connection = false;
-    //        LEDManagement::set_mode_disconnected();
-    ////    Clean queue
-    //        cleanQueues();
-    ////        RFGWCommunication::cleanMessages();
+    printf("Neuron rf disconnected\n");
+    has_rf_connection = false;
+    LEDManagement::set_mode_disconnected();
+    //    Clean queues
+    cleanQueues();
+    //        RFGWCommunication::cleanMessages();
   }
 }
 
@@ -142,17 +141,21 @@ void Communications::init() {
       has_neuron_connection = 2;
       printf("Wired Neuron connected\n");
     }
-    p.header.size    = 0;
-    p.header.command = BRIGHTNESS;
-    sendPacket(p);
-    p.header.command = PALETTE_COLORS;
-    sendPacket(p);
-    p.header.command = LAYER_KEYMAP_COLORS;
-    sendPacket(p);
-    p.header.command = LAYER_UNDERGLOW_COLORS;
-    sendPacket(p);
-    p.header.command = MODE_LED;
-    sendPacket(p);
+    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
+      p.header.size    = 0;
+      p.header.command = BRIGHTNESS;
+      sendPacket(p);
+      p.header.command = PALETTE_COLORS;
+      sendPacket(p);
+      p.header.command = LAYER_KEYMAP_COLORS;
+      sendPacket(p);
+      p.header.command = LAYER_UNDERGLOW_COLORS;
+      sendPacket(p);
+      p.header.command = MODE_LED;
+      sendPacket(p);
+    } else {
+      LEDManagement::set_mode_connected();
+    }
   });
 
   callbacks.bind(DISCONNECTED, [](Packet p) {
@@ -202,7 +205,9 @@ void Communications::init() {
   });
 
   callbacks.bind(MODE_LED, [](Packet p) {
-    LEDManagement::set_led_mode(p.data);
+    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
+      LEDManagement::set_led_mode(p.data);
+    }
   });
 
   //TODO: SET_LED
