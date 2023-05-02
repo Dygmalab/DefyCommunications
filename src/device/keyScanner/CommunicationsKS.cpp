@@ -141,21 +141,21 @@ void Communications::init() {
       has_neuron_connection = 2;
       printf("Wired Neuron connected\n");
     }
-    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
-      p.header.size    = 0;
-      p.header.command = BRIGHTNESS;
-      sendPacket(p);
-      p.header.command = PALETTE_COLORS;
-      sendPacket(p);
-      p.header.command = LAYER_KEYMAP_COLORS;
-      sendPacket(p);
-      p.header.command = LAYER_UNDERGLOW_COLORS;
-      sendPacket(p);
-      p.header.command = MODE_LED;
-      sendPacket(p);
-    } else {
-      LEDManagement::set_mode_connected();
-    }
+    //    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
+    p.header.size    = 0;
+    p.header.command = BRIGHTNESS;
+    sendPacket(p);
+    p.header.command = PALETTE_COLORS;
+    sendPacket(p);
+    p.header.command = LAYER_KEYMAP_COLORS;
+    sendPacket(p);
+    p.header.command = LAYER_UNDERGLOW_COLORS;
+    sendPacket(p);
+    p.header.command = MODE_LED;
+    sendPacket(p);
+    //    } else {
+    //      LEDManagement::set_mode_connected();
+    //    }
   });
 
   callbacks.bind(DISCONNECTED, [](Packet p) {
