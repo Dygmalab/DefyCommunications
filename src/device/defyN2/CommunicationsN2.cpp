@@ -49,40 +49,14 @@ class RFGW_parser {
 
   static void run() {
     rfgw_poll();
-    uint16_t pipe_send_loadsize = 0;
-    uint16_t pipe_recv_loadsize = 0;
-
-    rfgw_pipe_get_recv_loadsize(RFGW_PIPE_ID_KEYSCANNER_LEFT, &pipe_recv_loadsize);
-    rfgw_pipe_get_send_freesize(RFGW_PIPE_ID_KEYSCANNER_LEFT, &pipe_send_loadsize);
-
-    if (pipe_recv_loadsize) {
-      left.connected             = true;
-      left.lastTimeCommunication = time_counter.get_millis();
-      rfgw_pipe_recv(RFGW_PIPE_ID_KEYSCANNER_LEFT, &left.rx_buffer[left.rx_buffer_last_index], pipe_recv_loadsize);
-      left.rx_buffer_last_index += pipe_recv_loadsize;
-      left.checkBuffer();
-      if (left.tx_messages.empty()) {
-        Packet packet{};
-        packet                = {};
-        packet.header.device  = Communications_protocol::RF_DEFY_LEFT;
-        packet.header.command = Communications_protocol::IS_ALIVE;
-        packet.header.size    = 0;
-        packet.header.crc     = 0;
-        left.tx_messages.emplace(packet);
-      }
-    }
-
-    if (!left.tx_messages.empty()) {
-      Side::PacketSender &packet_sender = left.tx_messages.front();
-      if (pipe_send_loadsize >= sizeof(Header) + packet_sender.packet.header.size + 1) {
-        rfgw_pipe_send(RFGW_PIPE_ID_KEYSCANNER_LEFT, (uint8_t *)packet_sender.buf, sizeof(Header) + packet_sender.packet.header.size + 1);
-        left.tx_messages.pop();
-      }
-    }
+    left.run();
+    right.run();
   }
 
 
   struct Side {
+    explicit Side(rfgw_pipe_id_t pipe)
+      : pipe_id(pipe) {}
     uint32_t checkPacketInBuffer(uint32_t startIndex, Packet &packet) {
       uint32_t bufferIndex;
       uint32_t i;
@@ -99,6 +73,39 @@ class RFGW_parser {
       }
       //TODO: check crc
       return i + startIndex;
+    }
+
+    void run() {
+      uint16_t pipe_send_loadsize = 0;
+      uint16_t pipe_recv_loadsize = 0;
+
+      rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
+      rfgw_pipe_get_send_freesize(pipe_id, &pipe_send_loadsize);
+
+      if (pipe_recv_loadsize) {
+        connected             = true;
+        lastTimeCommunication = time_counter.get_millis();
+        rfgw_pipe_recv(pipe_id, &rx_buffer[rx_buffer_last_index], pipe_recv_loadsize);
+        rx_buffer_last_index += pipe_recv_loadsize;
+        checkBuffer();
+        if (tx_messages.empty()) {
+          Packet packet{};
+          packet                = {};
+          packet.header.device  = Communications_protocol::RF_NEURON_DEFY;
+          packet.header.command = Communications_protocol::IS_ALIVE;
+          packet.header.size    = 0;
+          packet.header.crc     = 0;
+          tx_messages.emplace(packet);
+        }
+      }
+
+      if (!tx_messages.empty()) {
+        Side::PacketSender &packet_sender = tx_messages.front();
+        if (pipe_send_loadsize >= sizeof(Header) + packet_sender.packet.header.size + 1) {
+          rfgw_pipe_send(pipe_id, (uint8_t *)packet_sender.buf, sizeof(Header) + packet_sender.packet.header.size + 1);
+          tx_messages.pop();
+        }
+      }
     }
 
     void checkBuffer() {
@@ -134,6 +141,7 @@ class RFGW_parser {
     };
 
     bool connected = false;
+    rfgw_pipe_id_t pipe_id;
     uint32_t lastTimeCommunication{0};
     uint8_t rx_buffer[512]{};
     uint16_t rx_buffer_last_index{0};
@@ -144,9 +152,11 @@ class RFGW_parser {
     };
   };
   static Side left;
+  static Side right;
 };
 
-RFGW_parser::Side RFGW_parser::left;
+RFGW_parser::Side RFGW_parser::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
+RFGW_parser::Side RFGW_parser::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
 
 
 void Communications::init() {
@@ -214,6 +224,8 @@ bool Communications::sendPacket(Packet packet) {
     if (spiPort2Device != UNKNOWN)
       spiPort2.sendPacket(packet);
 #endif
+    if (RFGW_parser::right.connected)
+      RFGW_parser::right.sendPacket(packet);
     if (RFGW_parser::left.connected)
       RFGW_parser::left.sendPacket(packet);
   }
@@ -232,6 +244,10 @@ bool Communications::sendPacket(Packet packet) {
 #endif
   if (RFGW_parser::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
     RFGW_parser::left.sendPacket(packet);
+
+
+  if (RFGW_parser::right.connected && device_to_send == Communications_protocol::RF_DEFY_RIGHT)
+    RFGW_parser::right.sendPacket(packet);
 
   return true;
 }
@@ -279,6 +295,14 @@ void checkActive() {
     RFGW_parser::left.connected = false;
     while (!RFGW_parser::left.tx_messages.empty()) {
       RFGW_parser::left.tx_messages.pop();
+    }
+  }
+
+  now_active = time_counter.get_millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
+  if (!now_active) {
+    RFGW_parser::right.connected = false;
+    while (!RFGW_parser::right.tx_messages.empty()) {
+      RFGW_parser::right.tx_messages.pop();
     }
   }
 }
