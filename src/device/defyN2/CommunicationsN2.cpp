@@ -7,8 +7,11 @@
 #include "rf_gateway.h"
 #include "CRC_wrapper.h"
 
+extern Usb_serial usb_serial;  // It is declared in main.cpp
 
 extern Time_counter time_counter;
+
+constexpr static uint8_t DELIMITER{0b10101010};
 
 #if COMPILE_SPI0_SUPPORT
 static SpiPort spiPort0(0);
@@ -28,7 +31,7 @@ static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
 #endif
 
-constexpr static uint32_t TIMEOUT = 400;
+static uint32_t TIMEOUT = 1300;
 
 void checkActive();
 
@@ -90,19 +93,22 @@ class RFGW_parser {
         checkBuffer();
         if (tx_messages.empty()) {
           Packet packet{};
-          packet                = {};
-          packet.header.device  = Communications_protocol::RF_NEURON_DEFY;
           packet.header.command = Communications_protocol::IS_ALIVE;
-          packet.header.size    = 0;
-          packet.header.crc     = 0;
-          tx_messages.emplace(packet);
+          sendPacket(packet);
         }
       }
 
       if (!tx_messages.empty()) {
-        Side::PacketSender &packet_sender = tx_messages.front();
-        if (pipe_send_loadsize >= sizeof(Header) + packet_sender.packet.header.size + 1) {
-          rfgw_pipe_send(pipe_id, (uint8_t *)packet_sender.buf, sizeof(Header) + packet_sender.packet.header.size + 1);
+        Packet &packet          = tx_messages.front();
+        size_t size_to_transfer = sizeof(Header) + packet.header.size;
+        if (pipe_send_loadsize >= size_to_transfer) {
+          if(packet.header.command == 10){
+            printf("hi");
+          }
+          uint8_t outputBuffer[MAX_TRANSFER_SIZE + 1]{};
+          memcpy(outputBuffer, packet.buf, size_to_transfer);
+          outputBuffer[size_to_transfer] = DELIMITER;
+          rfgw_pipe_send(pipe_id, outputBuffer, size_to_transfer + 1);
           tx_messages.pop();
         }
       }
@@ -111,44 +117,43 @@ class RFGW_parser {
     void checkBuffer() {
       uint32_t i = 0;
       do {
-        if (rx_buffer[i++] == 0b10101010) {
+        if (rx_buffer[i++] == DELIMITER) {
           Packet packet{};
-          volatile uint32_t sizeOfPacket = checkPacketInBuffer(i, packet);
-          if (sizeOfPacket != 0) {
+          if (i > MAX_TRANSFER_SIZE) {
+            //Something happend in the transfer left clear the buffer
+            memset(rx_buffer, 0, i);
+            rx_buffer_last_index -= i;
+            memmove(rx_buffer, &rx_buffer[i], rx_buffer_last_index);
+            memset(&rx_buffer[rx_buffer_last_index], 0, rx_buffer_last_index + i);
+            i = 0;
+            continue;
+          }
+          memcpy(packet.buf, rx_buffer, i);
+          uint8_t check_crc = packet.header.crc;
+          packet.header.crc = 0;
+          if (check_crc == crc8(packet.buf, sizeof(Header) + packet.header.size)) {
             Communications.callbacks.call(packet.header.command, packet);
-            memset(rx_buffer, 0, sizeOfPacket);
-            memcpy(rx_buffer, &rx_buffer[sizeOfPacket], rx_buffer_last_index - sizeOfPacket);
-            memset(&rx_buffer[sizeOfPacket], 0, rx_buffer_last_index - sizeOfPacket);
-            //Start from the beginning
-            i                    = 0;
-            rx_buffer_last_index = rx_buffer_last_index - sizeOfPacket;
+            memset(rx_buffer, 0, i);
+            rx_buffer_last_index -= i;
+            memmove(rx_buffer, &rx_buffer[i], rx_buffer_last_index);
+            memset(&rx_buffer[rx_buffer_last_index], 0, rx_buffer_last_index + i);
+            i = 0;
           }
         }
       } while (i < rx_buffer_last_index);
     }
-
-
-    struct PacketSender {
-      explicit PacketSender(Packet p)
-        : packet(p){};
-      union {
-        struct {
-          uint8_t flag = 0b10101010;
-          Packet packet;
-        };
-        uint8_t buf[sizeof(packet) + 1];
-      };
-    };
 
     bool connected = false;
     rfgw_pipe_id_t pipe_id;
     uint32_t lastTimeCommunication{0};
     uint8_t rx_buffer[512]{};
     uint16_t rx_buffer_last_index{0};
-    std::queue<PacketSender> tx_messages;
+    std::queue<Packet> tx_messages;
     void sendPacket(Packet &packet) {
+      packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
-      tx_messages.emplace(packet);
+      packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
+      tx_messages.push(packet);
     };
   };
   static Side left;
