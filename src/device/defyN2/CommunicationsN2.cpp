@@ -102,9 +102,6 @@ class RFGW_parser {
         Packet &packet          = tx_messages.front();
         size_t size_to_transfer = sizeof(Header) + packet.header.size;
         if (pipe_send_loadsize >= size_to_transfer) {
-          if(packet.header.command == 10){
-            printf("hi");
-          }
           uint8_t outputBuffer[MAX_TRANSFER_SIZE + 1]{};
           memcpy(outputBuffer, packet.buf, size_to_transfer);
           outputBuffer[size_to_transfer] = DELIMITER;
