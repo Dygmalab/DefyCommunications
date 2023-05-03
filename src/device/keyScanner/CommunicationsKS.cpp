@@ -12,6 +12,7 @@
 #include "CRC.h"
 
 constexpr uint8_t SIDE_ID = 25;
+static uint32_t TIMEOUT   = 900;
 queue_t txMessages;
 queue_t rxMessages;
 Communications_protocol::Packet tx_message;
@@ -19,7 +20,7 @@ Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
 bool need_polling{false};
 uint32_t last_time_communication;
-uint16_t keep_alive_timeout = 150;
+uint16_t keep_alive_timeout = 600;
 
 //TODO: Create enum state for connections
 uint8_t has_neuron_connection           = 0;
@@ -61,7 +62,7 @@ void Communications::run() {
     //If we have a response then update the time.
     uint8_t rx_crc        = rx_message.header.crc;
     rx_message.header.crc = 0;
-    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Packet));
+    uint8_t crc_8         = crc8(rx_message.buf, sizeof(Header) + rx_message.header.size);
     if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
       last_time_communication_neuron = ms_since_enter;
       need_polling                   = rx_message.header.has_more_packets;
@@ -75,21 +76,22 @@ void Communications::run() {
     }
   }
 
-  if (has_neuron_connection && ms_since_enter - last_time_communication_neuron > 900) {
+  if (has_neuron_connection && ms_since_enter - last_time_communication_neuron > TIMEOUT) {
     printf("Neuron disconnected\n");
+    keep_alive_timeout    = 100;
     has_neuron_connection = false;
     LEDManagement::set_mode_disconnected();
     //Clean queue
     cleanQueues();
   }
 
-  if (has_rf_connection && ms_since_enter - RFGWCommunication::last_time_communication_rf > 900) {
+  if (has_rf_connection && ms_since_enter - RFGWCommunication::last_time_communication_rf > TIMEOUT) {
     printf("Neuron rf disconnected\n");
     has_rf_connection = false;
     LEDManagement::set_mode_disconnected();
     //    Clean queues
     cleanQueues();
-    //        RFGWCommunication::cleanMessages();
+    RFGWCommunication::cleanMessages();
   }
 }
 
@@ -116,6 +118,7 @@ void Communications::init() {
         has_neuron_connection = 1;
         printf("Neuron is available to connect\n");
       }
+      printf("%i is available\n", p.header.device);
       p.header.device  = device;
       p.header.command = Communications_protocol::CONNECTED;
       uint32_t version = FMW_VERSION;
@@ -130,18 +133,21 @@ void Communications::init() {
     has_rf_connection     = false;
 
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
-      has_rf_connection = 2;
+      has_rf_connection  = 2;
+      keep_alive_timeout = 1000;
+      TIMEOUT            = 3000;
       printf("RF connected\n");
     }
     if (p.header.device == Communications_protocol::NEURON_DEFY) {
       has_neuron_connection = 2;
+      keep_alive_timeout    = 100;
+      TIMEOUT               = 400;
       printf("Neuron connected\n");
     }
     if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
       has_neuron_connection = 2;
       printf("Wired Neuron connected\n");
     }
-    //    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
     p.header.size    = 0;
     p.header.command = BRIGHTNESS;
     sendPacket(p);
@@ -153,9 +159,6 @@ void Communications::init() {
     sendPacket(p);
     p.header.command = MODE_LED;
     sendPacket(p);
-    //    } else {
-    //      LEDManagement::set_mode_connected();
-    //    }
   });
 
   callbacks.bind(DISCONNECTED, [](Packet p) {
@@ -183,7 +186,8 @@ void Communications::init() {
   });
 
   callbacks.bind(HAS_KEYS, [this](Packet p) {
-    sendPacket(p);
+    printf("Warning why has enter here!\n");
+    //    sendPacket(p);
   });
 
   callbacks.bind(KEYSCAN_INTERVAL, [](Packet p) {
@@ -205,9 +209,7 @@ void Communications::init() {
   });
 
   callbacks.bind(MODE_LED, [](Packet p) {
-    if (p.header.device != Communications_protocol::RF_NEURON_DEFY) {
-      LEDManagement::set_led_mode(p.data);
-    }
+    LEDManagement::set_led_mode(p.data);
   });
 
   //TODO: SET_LED
@@ -334,14 +336,14 @@ void Communications::init() {
     IS31FL3743B::setPullUpRegister(led_driver_pull_up);
   });
 
-  queue_init(&txMessages, sizeof(Communications_protocol::Packet), 20);
-  queue_init(&rxMessages, sizeof(Communications_protocol::Packet), 20);
+  queue_init(&txMessages, sizeof(Communications_protocol::Packet), 100);
+  queue_init(&rxMessages, sizeof(Communications_protocol::Packet), 100);
 }
 
 bool Communications::sendPacket(Packet packet) {
   packet.header.device = device;
   packet.header.crc    = 0;
-  packet.header.crc    = crc8(packet.buf, sizeof(Packet));
+  packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
   queue_add_blocking(&txMessages, &packet);
   return true;
 }
