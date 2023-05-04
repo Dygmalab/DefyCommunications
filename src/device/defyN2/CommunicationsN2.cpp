@@ -60,23 +60,6 @@ class RFGW_parser {
   struct Side {
     explicit Side(rfgw_pipe_id_t pipe)
       : pipe_id(pipe) {}
-    uint32_t checkPacketInBuffer(uint32_t startIndex, Packet &packet) {
-      uint32_t bufferIndex;
-      uint32_t i;
-      for (i = 0; i < sizeof(Header); ++i) {
-        bufferIndex = i + startIndex;
-        if (bufferIndex >= rx_buffer_last_index) return 0;
-        packet.buf[i] = rx_buffer[bufferIndex];
-      }
-      startIndex = i + startIndex;
-      for (i = 0; i < packet.header.size; ++i) {
-        bufferIndex = i + startIndex;
-        if (bufferIndex >= rx_buffer_last_index) return 0;
-        packet.data[i] = rx_buffer[bufferIndex];
-      }
-      //TODO: check crc
-      return i + startIndex;
-    }
 
     void run() {
       uint16_t pipe_send_loadsize = 0;
