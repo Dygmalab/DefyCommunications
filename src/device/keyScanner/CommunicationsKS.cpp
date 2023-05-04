@@ -61,7 +61,81 @@ void rfDisconnection(bool cleanRf = true) {
   keep_alive_timeout = 600;
   just_connected     = false;
 }
+
+void connectionStateMachine() {
+  if (!just_connected) return;
+  static uint32_t last_wait_time = 0;
+  if (uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time()); has_rf_connection && ms_since_enter - last_wait_time < 20) {
+    last_wait_time = ms_since_enter;
+    return;
+  }
+
+  static enum {
+    BRIGHTNESS,
+    PALETTE,
+    FIRST_LAYER_KEYMAP_COLOR,
+    FIRST_LAYER_UNDERGLOW_CONNECTION,
+    LED_MODE,
+    NEXT_LAYER,
+    NEXT_UNDERGLOW,
+  } connectionState;
+  static uint8_t layer = 0;
+
+  Packet p{};
+  switch (connectionState) {
+  case BRIGHTNESS:
+    p.header.command = Communications_protocol::BRIGHTNESS;
+    Communications.sendPacket(p);
+    connectionState = PALETTE;
+    break;
+  case PALETTE:
+    p.header.command = Communications_protocol::PALETTE_COLORS;
+    Communications.sendPacket(p);
+    connectionState = FIRST_LAYER_KEYMAP_COLOR;
+    break;
+  case FIRST_LAYER_KEYMAP_COLOR:
+    p.header.size    = 1;
+    p.data[0]        = layer;
+    p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
+    Communications.sendPacket(p);
+    connectionState = FIRST_LAYER_UNDERGLOW_CONNECTION;
+    break;
+  case FIRST_LAYER_UNDERGLOW_CONNECTION:
+    p.header.size    = 1;
+    p.data[0]        = layer++;
+    p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
+    Communications.sendPacket(p);
+    connectionState = LED_MODE;
+    break;
+  case LED_MODE:
+    p.header.command = Communications_protocol::MODE_LED;
+    Communications.sendPacket(p);
+    connectionState = NEXT_LAYER;
+    break;
+  case NEXT_LAYER:
+    p.header.size    = 1;
+    p.data[0]        = layer;
+    p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
+    Communications.sendPacket(p);
+    connectionState = NEXT_UNDERGLOW;
+    break;
+  case NEXT_UNDERGLOW:
+    p.header.size    = 1;
+    p.data[0]        = layer++;
+    p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
+    Communications.sendPacket(p);
+    if (layer == 10) {
+      just_connected  = false;
+      layer           = 0;
+      connectionState = BRIGHTNESS;
+    } else {
+      connectionState = NEXT_LAYER;
+    }
+    break;
+  }
+}
 void Communications::run() {
+  connectionStateMachine();
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
   if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     last_time_communication = ms_since_enter;
@@ -148,7 +222,7 @@ void Communications::init() {
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
       has_rf_connection  = 2;
       keep_alive_timeout = 1000;
-      TIMEOUT            = 3000;
+      TIMEOUT            = 2000;
       printf("RF connected\n");
     }
     if (p.header.device == Communications_protocol::NEURON_DEFY) {
@@ -159,17 +233,17 @@ void Communications::init() {
     }
     if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
       has_neuron_connection = 2;
+      keep_alive_timeout    = 100;
+      TIMEOUT               = 400;
       printf("Wired Neuron connected\n");
     }
-    just_connected   = true;
-    p.header.size    = 0;
-    p.header.command = BRIGHTNESS;
-    sendPacket(p);
+    just_connected = true;
   });
 
   callbacks.bind(DISCONNECTED, [](Packet p) {
     rfDisconnection(false);
     neuronDisconnection();
+    sleep_ms(2000);
   });
 
   callbacks.bind(SLEEP, [](Packet p) {
@@ -211,18 +285,10 @@ void Communications::init() {
 
   callbacks.bind(BRIGHTNESS, [this](Packet p) {
     LEDManagement::setMaxBrightness(p.data[0]);
-    if (just_connected) {
-      p                = {};
-      p.header.command = PALETTE_COLORS;
-      sendPacket(p);
-    }
   });
 
   callbacks.bind(MODE_LED, [](Packet p) {
     LEDManagement::set_led_mode(p.data);
-    if (just_connected) {
-      just_connected = false;
-    }
   });
 
   //TODO: SET_LED
@@ -230,15 +296,6 @@ void Communications::init() {
 
   callbacks.bind(PALETTE_COLORS, [this](Packet p) {
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
-    if (just_connected) {
-      p                = {};
-      p.header.command = LAYER_KEYMAP_COLORS;
-      p.header.size    = 1;
-      p.data[0]        = 0;
-      sendPacket(p);
-      p.header.command = LAYER_UNDERGLOW_COLORS;
-      sendPacket(p);
-    }
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [this](Packet p) {
@@ -266,18 +323,6 @@ void Communications::init() {
       }
       swap = !swap;
     }
-    if (just_connected) {
-      p = {};
-      if (++layerIndex != 10) {
-        p.data[0]        = layerIndex;
-        p.header.command = LAYER_KEYMAP_COLORS;
-        p.header.size    = 1;
-        sendPacket(p);
-      } else {
-        p.header.command = MODE_LED;
-        sendPacket(p);
-      }
-    }
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
@@ -304,15 +349,6 @@ void Communications::init() {
         layer.underGlow_leds[j] = message[k++].secondColor;
       }
       swap = !swap;
-    }
-    if (just_connected) {
-      p = {};
-      if (++layerIndex != 10) {
-        p.data[0]        = layerIndex;
-        p.header.command = LAYER_UNDERGLOW_COLORS;
-        p.header.size    = 1;
-        sendPacket(p);
-      }
     }
   });
 
