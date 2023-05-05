@@ -3,7 +3,7 @@
 #include "Communications.h"
 #include "SPISlave.h"
 
-constexpr static uint32_t timeout = 200;
+constexpr static uint32_t timeout = 600;
 struct SideInfo {
   SideInfo(Devices _devices)
     : device(_devices) {}
@@ -22,31 +22,11 @@ void Communications::init() {
   port0.init();
   port1.init();
 
-  auto update_last_communication = [this](Packet p) {
-    if (p.header.device == KEYSCANNER_DEFY_RIGHT) {
-      right.lastCommunication = millis();
-    }
-    if (p.header.device == KEYSCANNER_DEFY_LEFT) {
-      left.lastCommunication = millis();
-    }
-  };
-
-  callbacks.bind(IS_ALIVE, update_last_communication);
-  callbacks.bind(HAS_KEYS, update_last_communication);
-
   callbacks.bind(CONNECTED, [this](Packet p) {
-    if (p.header.device == KEYSCANNER_DEFY_RIGHT) {
-      right.lastCommunication = millis();
-      right.online            = true;
-      if (port0.device == KEYSCANNER_DEFY_RIGHT) right.port = false;
-      if (port1.device == KEYSCANNER_DEFY_RIGHT) right.port = true;
-    }
-    if (p.header.device == KEYSCANNER_DEFY_LEFT) {
-      left.lastCommunication = millis();
-      left.online            = true;
-      if (port0.device == KEYSCANNER_DEFY_LEFT) left.port = false;
-      if (port1.device == KEYSCANNER_DEFY_LEFT) left.port = true;
-    }
+    p.header.size    = 0;
+    p.header.device  = p.header.device;
+    p.header.command = CONNECTED;
+    sendPacket(p);
   });
 }
 
@@ -56,12 +36,20 @@ void Communications::run() {
   if (!queue_is_empty(&port0.rx_messages_)) {
     Packet packet;
     queue_remove_blocking(&port0.rx_messages_, &packet);
+    SideInfo &side         = packet.header.device == KEYSCANNER_DEFY_LEFT ? left : right;
+    side.lastCommunication = millis();
+    side.online            = true;
+    side.port              = false;
     callbacks.call(packet.header.command, packet);
   }
 
   if (!queue_is_empty(&port1.rx_messages_)) {
     Packet packet;
     queue_remove_blocking(&port1.rx_messages_, &packet);
+    SideInfo &side         = packet.header.device == KEYSCANNER_DEFY_LEFT ? left : right;
+    side.lastCommunication = millis();
+    side.online            = true;
+    side.port              = true;
     callbacks.call(packet.header.command, packet);
   }
 
@@ -71,31 +59,18 @@ void Communications::run() {
 
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
-  packet.header.device   = Communications_protocol::NEURON_DEFY_WIRED;
+  packet.header.device   = Communications_protocol::WIRED_NEURON_DEFY;
   if (device_to_send == Communications_protocol::UNKNOWN) {
     if (port0.device != UNKNOWN)
       queue_add_blocking(&port0.tx_messages_, &packet);
     if (port1.device != UNKNOWN)
       queue_add_blocking(&port1.tx_messages_, &packet);
   }
-  if (device_to_send == Communications_protocol::KEYSCANNER_DEFY_LEFT) {
-    if (left.port) {
-      if (port1.device != UNKNOWN)
-        queue_add_blocking(&port1.tx_messages_, &packet);
-    } else {
-      if (port0.device != UNKNOWN)
-        queue_add_blocking(&port0.tx_messages_, &packet);
-    }
-  }
-  if (device_to_send == Communications_protocol::KEYSCANNER_DEFY_RIGHT) {
-    if (right.port) {
-      if (port1.device != UNKNOWN)
-        queue_add_blocking(&port1.tx_messages_, &packet);
-    } else {
-      if (port0.device != UNKNOWN)
-        queue_add_blocking(&port0.tx_messages_, &packet);
-    }
-  }
+  if (device_to_send == port1.device)
+    queue_add_blocking(&port1.tx_messages_, &packet);
+  if (device_to_send == port0.device)
+    queue_add_blocking(&port0.tx_messages_, &packet);
+
   return true;
 }
 
