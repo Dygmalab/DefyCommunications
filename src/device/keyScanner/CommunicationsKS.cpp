@@ -10,6 +10,7 @@
 #include "hardware/clocks.h"
 #include "RFGW_communications.h"
 #include "CRC.h"
+#include "debug_print.h"
 
 constexpr uint8_t SIDE_ID = 25;
 static uint32_t TIMEOUT   = 900;
@@ -41,7 +42,7 @@ void cleanQueues() {
 
 
 void neuronDisconnection() {
-  printf("Neuron disconnected\n");
+  DBG_PRINTF_TRACE("Neuron disconnected\n");
   has_neuron_connection = false;
   LEDManagement::set_mode_disconnected();
   //Clean queue
@@ -51,7 +52,7 @@ void neuronDisconnection() {
 }
 
 void rfDisconnection(bool cleanRf = true) {
-  printf("Neuron rf disconnected\n");
+  DBG_PRINTF_TRACE("Neuron rf disconnected\n");
   has_rf_connection = false;
   LEDManagement::set_mode_disconnected();
   //    Clean queues
@@ -195,17 +196,16 @@ void Communications::init() {
     if ((!has_neuron_connection && !has_rf_connection)) {
       if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
         has_neuron_connection = 1;
-        printf("Wired Neuron is available to connect\n");
+        DBG_PRINTF_TRACE("Wired Neuron is available to connect");
       }
       if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
         has_rf_connection = 1;
-        printf("RF Neuron is available to connect\n");
+        DBG_PRINTF_TRACE("RF Neuron is available to connect");
       }
       if (p.header.device == Communications_protocol::NEURON_DEFY) {
         has_neuron_connection = 1;
-        printf("Neuron is available to connect\n");
+        DBG_PRINTF_TRACE("Neuron is available to connect");
       }
-      printf("%i is available\n", p.header.device);
       p.header.device  = device;
       p.header.command = Communications_protocol::CONNECTED;
       uint32_t version = FMW_VERSION;
@@ -223,19 +223,19 @@ void Communications::init() {
       has_rf_connection  = 2;
       keep_alive_timeout = 1000;
       TIMEOUT            = 2000;
-      printf("RF connected\n");
+      DBG_PRINTF_TRACE("RF connected");
     }
     if (p.header.device == Communications_protocol::NEURON_DEFY) {
       has_neuron_connection = 2;
       keep_alive_timeout    = 100;
       TIMEOUT               = 400;
-      printf("Neuron connected\n");
+      DBG_PRINTF_TRACE("Neuron connected");
     }
     if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
       has_neuron_connection = 2;
       keep_alive_timeout    = 100;
       TIMEOUT               = 400;
-      printf("Wired Neuron connected\n");
+      DBG_PRINTF_TRACE("Wired Neuron connected");
     }
     just_connected = true;
   });
@@ -265,7 +265,7 @@ void Communications::init() {
   });
 
   callbacks.bind(HAS_KEYS, [this](Packet p) {
-    printf("Warning why has enter here!\n");
+    DBG_PRINTF_TRACE("Warning why has enter here!");
     //    sendPacket(p);
   });
 
@@ -379,7 +379,7 @@ void Communications::init() {
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
     configuration.start_info.pooling_rate_base      = pooling_rate_base;
     configuration.start_info.pooling_rate_variation = pooling_rate_variation;
-    printf("Sending alive interval base %lu and variation %lu\n", pooling_rate_base, pooling_rate_variation);
+    DBG_PRINTF_TRACE("Sending alive interval base %lu and variation %lu", pooling_rate_base, pooling_rate_variation);
     Configuration::set_configuration(configuration);
   });
   callbacks.bind(SET_SPI_SPEED, [](Packet p) {
@@ -391,7 +391,7 @@ void Communications::init() {
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
     configuration.start_info.spi_speed_base         = spi_speed_base;
     configuration.start_info.spi_speed_variation    = spi_speed_variation;
-    printf("Sending spi speed base %lu and variation %lu\n", spi_speed_base, spi_speed_variation);
+    DBG_PRINTF_TRACE("Sending spi speed base %lu and variation %lu", spi_speed_base, spi_speed_variation);
     Configuration::set_configuration(configuration);
   });
 
@@ -401,7 +401,7 @@ void Communications::init() {
     set_sys_clock_khz(cpu_speed, true);
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
     configuration.start_info.cpu_speed              = cpu_speed;
-    printf("Setting cpuSpeed to %lu\n", cpu_speed);
+    DBG_PRINTF_TRACE("Setting cpuSpeed to %lu", cpu_speed);
     Configuration::set_configuration(configuration);
   });
 
@@ -410,7 +410,7 @@ void Communications::init() {
     memcpy(&led_driver_pull_up, &rx_message.data[0], sizeof(uint8_t));
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
     configuration.start_info.pull_up_config         = led_driver_pull_up;
-    printf("Setting ledDriver in left side to %i\n", led_driver_pull_up);
+    DBG_PRINTF_TRACE("Setting ledDriver in left side to %i", led_driver_pull_up);
     Configuration::set_configuration(configuration);
     IS31FL3743B::setPullUpRegister(led_driver_pull_up);
   });
