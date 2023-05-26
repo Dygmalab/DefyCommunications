@@ -71,7 +71,7 @@ void connectionStateMachine() {
     return;
   }
 
-  static enum {
+  enum class ConnectionState {
     BRIGHTNESS,
     PALETTE,
     FIRST_LAYER_KEYMAP_COLOR,
@@ -79,48 +79,49 @@ void connectionStateMachine() {
     LED_MODE,
     NEXT_LAYER,
     NEXT_UNDERGLOW,
-  } connectionState;
-  static uint8_t layer = 0;
+  };
+  static ConnectionState connectionState = ConnectionState::BRIGHTNESS;
+  static uint8_t layer                   = 0;
 
   Packet p{};
   switch (connectionState) {
-  case BRIGHTNESS:
+  case ConnectionState::BRIGHTNESS:
     p.header.command = Communications_protocol::BRIGHTNESS;
     Communications.sendPacket(p);
-    connectionState = PALETTE;
+    connectionState = ConnectionState::PALETTE;
     break;
-  case PALETTE:
+  case ConnectionState::PALETTE:
     p.header.command = Communications_protocol::PALETTE_COLORS;
     Communications.sendPacket(p);
-    connectionState = FIRST_LAYER_KEYMAP_COLOR;
+    connectionState = ConnectionState::FIRST_LAYER_KEYMAP_COLOR;
     break;
-  case FIRST_LAYER_KEYMAP_COLOR:
+  case ConnectionState::FIRST_LAYER_KEYMAP_COLOR:
     p.header.size    = 1;
     p.data[0]        = layer;
     p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
     Communications.sendPacket(p);
-    connectionState = FIRST_LAYER_UNDERGLOW_CONNECTION;
+    connectionState = ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION;
     break;
-  case FIRST_LAYER_UNDERGLOW_CONNECTION:
+  case ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION:
     p.header.size    = 1;
     p.data[0]        = layer++;
     p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
     Communications.sendPacket(p);
-    connectionState = LED_MODE;
+    connectionState = ConnectionState::LED_MODE;
     break;
-  case LED_MODE:
+  case ConnectionState::LED_MODE:
     p.header.command = Communications_protocol::MODE_LED;
     Communications.sendPacket(p);
-    connectionState = NEXT_LAYER;
+    connectionState = ConnectionState::NEXT_LAYER;
     break;
-  case NEXT_LAYER:
+  case ConnectionState::NEXT_LAYER:
     p.header.size    = 1;
     p.data[0]        = layer;
     p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
     Communications.sendPacket(p);
-    connectionState = NEXT_UNDERGLOW;
+    connectionState = ConnectionState::NEXT_UNDERGLOW;
     break;
-  case NEXT_UNDERGLOW:
+  case ConnectionState::NEXT_UNDERGLOW:
     p.header.size    = 1;
     p.data[0]        = layer++;
     p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
@@ -128,9 +129,9 @@ void connectionStateMachine() {
     if (layer == 10) {
       just_connected  = false;
       layer           = 0;
-      connectionState = BRIGHTNESS;
+      connectionState = ConnectionState::BRIGHTNESS;
     } else {
-      connectionState = NEXT_LAYER;
+      connectionState = ConnectionState::NEXT_LAYER;
     }
     break;
   }
@@ -361,6 +362,7 @@ void Communications::init() {
     configuration.start_info.led_driver_enabled     = enable;
     Configuration::set_configuration(configuration);
   });
+
   callbacks.bind(SET_ENABLE_UNDERGLOW, [](Packet p) {
     uint8_t enable;
     memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
@@ -382,6 +384,7 @@ void Communications::init() {
     DBG_PRINTF_TRACE("Sending alive interval base %lu and variation %lu", pooling_rate_base, pooling_rate_variation);
     Configuration::set_configuration(configuration);
   });
+
   callbacks.bind(SET_SPI_SPEED, [](Packet p) {
     uint32_t spi_speed_base;
     uint32_t spi_speed_variation;
@@ -413,6 +416,20 @@ void Communications::init() {
     DBG_PRINTF_TRACE("Setting ledDriver in left side to %i", led_driver_pull_up);
     Configuration::set_configuration(configuration);
     IS31FL3743B::setPullUpRegister(led_driver_pull_up);
+  });
+
+  callbacks.bind(BATTERY_LEVEL, [this](Packet p) {
+    uint32_t battery_level = RFGWCommunication::getBatteryLevel();
+    memcpy(p.data, &battery_level, sizeof(battery_level));
+    p.header.size = sizeof(battery_level);
+    sendPacket(p);
+  });
+
+  callbacks.bind(BATTERY_STATUS, [this](Packet p) {
+    uint8_t battery_status = RFGWCommunication::getBatteryStatus();
+    memcpy(p.data, &battery_status, sizeof(battery_status));
+    p.header.size = sizeof(battery_status);
+    sendPacket(p);
   });
 
   queue_init(&txMessages, sizeof(Communications_protocol::Packet), 100);

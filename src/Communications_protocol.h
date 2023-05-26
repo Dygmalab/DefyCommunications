@@ -38,6 +38,9 @@ enum Commands : uint8_t {
   LAYER_UNDERGLOW_COLORS,
   GET_OPEN_LED,
   GET_SHORT_LED,
+  //Battery
+  BATTERY_LEVEL = 40,
+  BATTERY_STATUS,
   //Config
   SET_SPI_SPEED = 100,
   SET_CLOCK_SPEED,
