@@ -71,8 +71,11 @@ void connectionStateMachine() {
     return;
   }
 
-  enum class ConnectionState {
+  enum class ConnectionState : uint8_t {
     BRIGHTNESS,
+    BATTERY_LEVEL,
+    BATTERY_STATUS,
+    BATTERY_SAVING,
     PALETTE,
     FIRST_LAYER_KEYMAP_COLOR,
     FIRST_LAYER_UNDERGLOW_CONNECTION,
@@ -80,16 +83,37 @@ void connectionStateMachine() {
     NEXT_LAYER,
     NEXT_UNDERGLOW,
   };
-  static ConnectionState connectionState = ConnectionState::BRIGHTNESS;
-  static uint8_t layer                   = 0;
+  static ConnectionState connectionState;
+  static uint8_t layer = 0;
 
   Packet p{};
   switch (connectionState) {
   case ConnectionState::BRIGHTNESS:
     p.header.command = Communications_protocol::BRIGHTNESS;
     Communications.sendPacket(p);
-    connectionState = ConnectionState::PALETTE;
+    connectionState = ConnectionState::BATTERY_LEVEL;
     break;
+  case ConnectionState::BATTERY_LEVEL: {
+    p.header.command   = Communications_protocol::BATTERY_LEVEL;
+    auto battery_level = RFGWCommunication::getBatteryLevel();
+    p.header.size      = sizeof(battery_level);
+    memcpy(p.data, &battery_level, p.header.size);
+    Communications.sendPacket(p);
+    connectionState = ConnectionState::BATTERY_STATUS;
+  } break;
+  case ConnectionState::BATTERY_STATUS: {
+    p.header.command    = Communications_protocol::BATTERY_STATUS;
+    auto battery_status = RFGWCommunication::getBatteryStatus();
+    p.header.size       = sizeof(battery_status);
+    memcpy(p.data, &battery_status, p.header.size);
+    Communications.sendPacket(p);
+    connectionState = ConnectionState::BATTERY_SAVING;
+  } break;
+  case ConnectionState::BATTERY_SAVING: {
+    p.header.command = Communications_protocol::BATTERY_SAVING;
+    Communications.sendPacket(p);
+    connectionState = ConnectionState::PALETTE;
+  } break;
   case ConnectionState::PALETTE:
     p.header.command = Communications_protocol::PALETTE_COLORS;
     Communications.sendPacket(p);
@@ -191,7 +215,7 @@ void Communications::init() {
     device = Communications_protocol::KEYSCANNER_DEFY_LEFT;
   }
 
-  auto empty_func = [](Packet p) {};
+  auto empty_func = [](Packet const &) {};
 
   callbacks.bind(IS_ALIVE, [this](Packet p) {
     if ((!has_neuron_connection && !has_rf_connection)) {
@@ -216,7 +240,7 @@ void Communications::init() {
     }
   });
 
-  callbacks.bind(CONNECTED, [this](Packet p) {
+  callbacks.bind(CONNECTED, [](Packet const &p) {
     has_neuron_connection = false;
     has_rf_connection     = false;
 
@@ -241,18 +265,18 @@ void Communications::init() {
     just_connected = true;
   });
 
-  callbacks.bind(DISCONNECTED, [](Packet p) {
+  callbacks.bind(DISCONNECTED, [](Packet const &) {
     rfDisconnection(false);
     neuronDisconnection();
     sleep_ms(2000);
   });
 
-  callbacks.bind(SLEEP, [](Packet p) {
+  callbacks.bind(SLEEP, [](Packet const &) {
     IS31FL3743B::set_enable(false);
     LEDManagement::set_enable_underGlow(false);
   });
 
-  callbacks.bind(WAKE_UP, [](Packet p) {
+  callbacks.bind(WAKE_UP, [](Packet const &) {
     IS31FL3743B::set_enable(true);
     LEDManagement::set_enable_underGlow(true);
     LEDManagement::set_updated(true);
@@ -265,12 +289,12 @@ void Communications::init() {
     sendPacket(p);
   });
 
-  callbacks.bind(HAS_KEYS, [this](Packet p) {
+  callbacks.bind(HAS_KEYS, [this](Packet const &) {
     DBG_PRINTF_TRACE("Warning why has enter here!");
     //    sendPacket(p);
   });
 
-  callbacks.bind(KEYSCAN_INTERVAL, [](Packet p) {
+  callbacks.bind(KEYSCAN_INTERVAL, [](Packet const &p) {
     KeyScanner.keyScanInterval(p.data[0]);
   });
 
@@ -284,22 +308,22 @@ void Communications::init() {
     sendPacket(p);
   });
 
-  callbacks.bind(BRIGHTNESS, [this](Packet p) {
+  callbacks.bind(BRIGHTNESS, [](Packet const &p) {
     LEDManagement::setMaxBrightness(p.data[0]);
   });
 
-  callbacks.bind(MODE_LED, [](Packet p) {
+  callbacks.bind(MODE_LED, [](Packet const &p) {
     LEDManagement::set_led_mode(p.data);
   });
 
   //TODO: SET_LED
   callbacks.bind(LED, empty_func);
 
-  callbacks.bind(PALETTE_COLORS, [this](Packet p) {
+  callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
   });
 
-  callbacks.bind(LAYER_KEYMAP_COLORS, [this](Packet p) {
+  callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
     uint8_t layerIndex = p.data[0];
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
@@ -353,8 +377,13 @@ void Communications::init() {
     }
   });
 
+  //Battery
+  callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Battery Saving is %i", p.data[0]);
+  });
+
   //Config
-  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet p) {
+  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet const &) {
     uint8_t enable;
     memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
     IS31FL3743B::set_enable(enable);
@@ -362,8 +391,7 @@ void Communications::init() {
     configuration.start_info.led_driver_enabled     = enable;
     Configuration::set_configuration(configuration);
   });
-
-  callbacks.bind(SET_ENABLE_UNDERGLOW, [](Packet p) {
+  callbacks.bind(SET_ENABLE_UNDERGLOW, [](Packet const &) {
     uint8_t enable;
     memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
     gpio_put(UG_EN, enable);
@@ -372,7 +400,7 @@ void Communications::init() {
     Configuration::set_configuration(configuration);
   });
 
-  callbacks.bind(ALIVE_INTERVAL, [](Packet p) {
+  callbacks.bind(ALIVE_INTERVAL, [](Packet const &) {
     uint32_t pooling_rate_base;
     uint32_t pooling_rate_variation;
     memcpy(&pooling_rate_base, &rx_message.data[0], sizeof(uint32_t));
@@ -384,8 +412,7 @@ void Communications::init() {
     DBG_PRINTF_TRACE("Sending alive interval base %lu and variation %lu", pooling_rate_base, pooling_rate_variation);
     Configuration::set_configuration(configuration);
   });
-
-  callbacks.bind(SET_SPI_SPEED, [](Packet p) {
+  callbacks.bind(SET_SPI_SPEED, [](Packet const &) {
     uint32_t spi_speed_base;
     uint32_t spi_speed_variation;
     memcpy(&spi_speed_base, &rx_message.data[0], sizeof(uint32_t));
@@ -398,7 +425,7 @@ void Communications::init() {
     Configuration::set_configuration(configuration);
   });
 
-  callbacks.bind(SET_CLOCK_SPEED, [](Packet p) {
+  callbacks.bind(SET_CLOCK_SPEED, [](Packet const &) {
     uint32_t cpu_speed;
     memcpy(&cpu_speed, &rx_message.data[0], sizeof(uint32_t));
     set_sys_clock_khz(cpu_speed, true);
@@ -408,7 +435,7 @@ void Communications::init() {
     Configuration::set_configuration(configuration);
   });
 
-  callbacks.bind(SET_LED_DRIVER_PULLUP, [](Packet p) {
+  callbacks.bind(SET_LED_DRIVER_PULLUP, [](Packet const &) {
     uint8_t led_driver_pull_up;
     memcpy(&led_driver_pull_up, &rx_message.data[0], sizeof(uint8_t));
     Configuration::StartConfiguration configuration = Configuration::get_configuration();
@@ -416,20 +443,6 @@ void Communications::init() {
     DBG_PRINTF_TRACE("Setting ledDriver in left side to %i", led_driver_pull_up);
     Configuration::set_configuration(configuration);
     IS31FL3743B::setPullUpRegister(led_driver_pull_up);
-  });
-
-  callbacks.bind(BATTERY_LEVEL, [this](Packet p) {
-    uint32_t battery_level = RFGWCommunication::getBatteryLevel();
-    memcpy(p.data, &battery_level, sizeof(battery_level));
-    p.header.size = sizeof(battery_level);
-    sendPacket(p);
-  });
-
-  callbacks.bind(BATTERY_STATUS, [this](Packet p) {
-    uint8_t battery_status = RFGWCommunication::getBatteryStatus();
-    memcpy(p.data, &battery_status, sizeof(battery_status));
-    p.header.size = sizeof(battery_status);
-    sendPacket(p);
   });
 
   queue_init(&txMessages, sizeof(Communications_protocol::Packet), 100);

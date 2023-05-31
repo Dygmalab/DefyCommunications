@@ -41,6 +41,7 @@ enum Commands : uint8_t {
   //Battery
   BATTERY_LEVEL = 40,
   BATTERY_STATUS,
+  BATTERY_SAVING,
   //Config
   SET_SPI_SPEED = 100,
   SET_CLOCK_SPEED,
