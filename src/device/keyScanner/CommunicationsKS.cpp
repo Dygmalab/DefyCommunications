@@ -380,6 +380,7 @@ void Communications::init() {
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
     DBG_PRINTF_TRACE("Battery Saving is %i", p.data[0]);
+    LEDManagement::set_battery_saving(p.data[0]);
   });
 
   //Config
