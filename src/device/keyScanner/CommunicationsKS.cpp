@@ -11,6 +11,7 @@
 #include "RFGW_communications.h"
 #include "CRC.h"
 #include "debug_print.h"
+#include "BatteryManagement.hpp"
 
 constexpr uint8_t SIDE_ID = 25;
 static uint32_t TIMEOUT   = 900;
@@ -380,7 +381,7 @@ void Communications::init() {
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
     DBG_PRINTF_TRACE("Battery Saving is %i", p.data[0]);
-    LEDManagement::set_battery_saving(p.data[0]);
+    BatteryManagement::set_battery_saving(p.data[0]);
   });
 
   //Config
