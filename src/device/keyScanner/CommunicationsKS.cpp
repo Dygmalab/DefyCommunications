@@ -96,7 +96,7 @@ void connectionStateMachine() {
     break;
   case ConnectionState::BATTERY_LEVEL: {
     p.header.command   = Communications_protocol::BATTERY_LEVEL;
-    auto battery_level = RFGWCommunication::getBatteryLevel();
+    auto battery_level = BatteryManagement::getBatteryLevel();
     p.header.size      = sizeof(battery_level);
     memcpy(p.data, &battery_level, p.header.size);
     Communications.sendPacket(p);
@@ -104,7 +104,7 @@ void connectionStateMachine() {
   } break;
   case ConnectionState::BATTERY_STATUS: {
     p.header.command    = Communications_protocol::BATTERY_STATUS;
-    auto battery_status = RFGWCommunication::getBatteryStatus();
+    auto battery_status = BatteryManagement::getBatteryStatus();
     p.header.size       = sizeof(battery_status);
     memcpy(p.data, &battery_status, p.header.size);
     Communications.sendPacket(p);
@@ -310,7 +310,12 @@ void Communications::init() {
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
-    LEDManagement::setMaxBrightness(p.data[0]);
+    float driver_brightness     = (float)p.data[0] / (float)255;
+    float under_glow_brightness = (float)p.data[1] / (float)255;
+    LEDManagement::set_max_ledDriver_brightness(driver_brightness);
+    LEDManagement::set_ledDriver_brightness(driver_brightness);
+    LEDManagement::set_max_underglow_brightness(under_glow_brightness);
+    LEDManagement::set_underglow_brightness(under_glow_brightness);
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
