@@ -74,8 +74,6 @@ void connectionStateMachine() {
 
   enum class ConnectionState : uint8_t {
     BRIGHTNESS,
-    BATTERY_LEVEL,
-    BATTERY_STATUS,
     BATTERY_SAVING,
     PALETTE,
     FIRST_LAYER_KEYMAP_COLOR,
@@ -92,24 +90,8 @@ void connectionStateMachine() {
   case ConnectionState::BRIGHTNESS:
     p.header.command = Communications_protocol::BRIGHTNESS;
     Communications.sendPacket(p);
-    connectionState = ConnectionState::BATTERY_LEVEL;
-    break;
-  case ConnectionState::BATTERY_LEVEL: {
-    p.header.command   = Communications_protocol::BATTERY_LEVEL;
-    auto battery_level = BatteryManagement::getBatteryLevel();
-    p.header.size      = sizeof(battery_level);
-    memcpy(p.data, &battery_level, p.header.size);
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::BATTERY_STATUS;
-  } break;
-  case ConnectionState::BATTERY_STATUS: {
-    p.header.command    = Communications_protocol::BATTERY_STATUS;
-    auto battery_status = BatteryManagement::getBatteryStatus();
-    p.header.size       = sizeof(battery_status);
-    memcpy(p.data, &battery_status, p.header.size);
-    Communications.sendPacket(p);
     connectionState = ConnectionState::BATTERY_SAVING;
-  } break;
+    break;
   case ConnectionState::BATTERY_SAVING: {
     p.header.command = Communications_protocol::BATTERY_SAVING;
     Communications.sendPacket(p);
@@ -190,6 +172,7 @@ void Communications::run() {
     if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
       last_time_communication_neuron = ms_since_enter;
       need_polling                   = rx_message.header.has_more_packets;
+      DBG_PRINTF_TRACE("Received Command %i from %i", rx_message.header.command, rx_message.header.device);
       callbacks.call(rx_message.header.command, rx_message);
       return;
     }
@@ -266,24 +249,28 @@ void Communications::init() {
     just_connected = true;
   });
 
-  callbacks.bind(DISCONNECTED, [](Packet const &) {
+  callbacks.bind(DISCONNECTED, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received disconnected from %i", p.header.device);
     rfDisconnection(false);
     neuronDisconnection();
     sleep_ms(2000);
   });
 
-  callbacks.bind(SLEEP, [](Packet const &) {
+  callbacks.bind(SLEEP, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received SLEEP from %i", p.header.device);
     IS31FL3743B::set_enable(false);
     LEDManagement::set_enable_underGlow(false);
   });
 
-  callbacks.bind(WAKE_UP, [](Packet const &) {
+  callbacks.bind(WAKE_UP, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received WAKE_UP from %i", p.header.device);
     IS31FL3743B::set_enable(true);
     LEDManagement::set_enable_underGlow(true);
     LEDManagement::set_updated(true);
   });
 
   callbacks.bind(VERSION, [this](Packet p) {
+    DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
     uint32_t version = FMW_VERSION;
     memcpy(p.data, &version, sizeof(version));
     p.header.size = sizeof(version);
@@ -296,15 +283,18 @@ void Communications::init() {
   });
 
   callbacks.bind(KEYSCAN_INTERVAL, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
     KeyScanner.keyScanInterval(p.data[0]);
   });
 
   callbacks.bind(GET_SHORT_LED, [this](Packet p) {
+    DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
     p.header.size = IS31FL3743B::get_short_leds(p.data);
     sendPacket(p);
   });
 
   callbacks.bind(GET_OPEN_LED, [this](Packet p) {
+    DBG_PRINTF_TRACE("Received GET_OPEN_LED from %i ", p.header.device);
     p.header.size = IS31FL3743B::get_open_leds(p.data);
     sendPacket(p);
   });
@@ -312,6 +302,7 @@ void Communications::init() {
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
     float driver_brightness     = (float)p.data[0] / (float)255;
     float under_glow_brightness = (float)p.data[1] / (float)255;
+    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %i", p.header.device, driver_brightness, under_glow_brightness);
     LEDManagement::set_max_ledDriver_brightness(driver_brightness);
     LEDManagement::set_ledDriver_brightness(driver_brightness);
     LEDManagement::set_max_underglow_brightness(under_glow_brightness);
@@ -319,6 +310,7 @@ void Communications::init() {
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::set_led_mode(p.data);
   });
 
@@ -326,10 +318,12 @@ void Communications::init() {
   callbacks.bind(LED, empty_func);
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
     uint8_t layerIndex = p.data[0];
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
@@ -357,6 +351,7 @@ void Communications::init() {
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
+    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i ", p.header.device);
     uint8_t layerIndex = p.data[0];
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
@@ -385,12 +380,12 @@ void Communications::init() {
 
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Battery Saving is %i", p.data[0]);
+    DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
     BatteryManagement::set_battery_saving(p.data[0]);
   });
 
   //Config
-  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet const &) {
+  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet const &p) {
     uint8_t enable;
     memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
     IS31FL3743B::set_enable(enable);
