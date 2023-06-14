@@ -121,7 +121,7 @@ class RFGW_parser {
     void sendPacket(Packet &packet) {
       if (!usbd_ready()) return;
       packet.header.crc    = 0;
-      packet.header.device = Communications_protocol::NEURON_DEFY;
+      packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
       tx_messages.push(packet);
     };
@@ -216,11 +216,12 @@ bool Communications::sendPacket(Packet packet) {
       RFGW_parser::left.sendPacket(packet);
   }
 
-#if COMPILE_SPI0_SUPPORT
-  if (spiPort0Device == device_to_send)
-    spiPort0.sendPacket(packet);
-#endif
   if (usbd_ready()) {
+
+#if COMPILE_SPI0_SUPPORT
+    if (spiPort0Device == device_to_send)
+      spiPort0.sendPacket(packet);
+#endif
 #if COMPILE_SPI1_SUPPORT
     if (spiPort1Device == device_to_send) {
       packet.header.device = Communications_protocol::NEURON_DEFY;
