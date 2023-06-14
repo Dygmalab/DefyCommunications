@@ -43,8 +43,14 @@ void cleanQueues() {
 
 
 void neuronDisconnection() {
-  DBG_PRINTF_TRACE("Neuron disconnected\n");
-  has_neuron_connection = false;
+  DBG_PRINTF_TRACE("Wired Neuron disconnected\n");
+  if (has_neuron_connection != 3) {
+    has_neuron_connection = false;
+  } else {
+    device                        = Communications_protocol::KEYSCANNER_DEFY_LEFT;
+    RFGWCommunication::relay_host = false;
+    RFGateway::rf_disable();
+  }
   LEDManagement::set_mode_disconnected();
   //Clean queue
   cleanQueues();
@@ -53,7 +59,7 @@ void neuronDisconnection() {
 }
 
 void rfDisconnection(bool cleanRf = true) {
-  DBG_PRINTF_TRACE("Neuron rf disconnected\n");
+  DBG_PRINTF_TRACE("Neuron 2 rf disconnected\n");
   has_rf_connection = false;
   LEDManagement::set_mode_disconnected();
   //    Clean queues
@@ -143,6 +149,7 @@ void connectionStateMachine() {
     break;
   }
 }
+
 void Communications::run() {
   connectionStateMachine();
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
@@ -172,13 +179,23 @@ void Communications::run() {
     if (rx_message.header.command != IS_DEAD && crc_8 == rx_crc) {
       last_time_communication_neuron = ms_since_enter;
       need_polling                   = rx_message.header.has_more_packets;
-      DBG_PRINTF_TRACE("Received Command %i from %i", rx_message.header.command, rx_message.header.device);
-      callbacks.call(rx_message.header.command, rx_message);
+      DBG_PRINTF_TRACE("Received wired Command %i from %i", rx_message.header.command, rx_message.header.device);
+      //If its for the right just relay the info
+      if (rx_message.header.device == Communications_protocol::BLE_DEFY_RIGHT) {
+        RFGWCommunication::sendPacket(rx_message);
+      } else if (rx_message.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
+        if (has_neuron_connection == 3)
+          RFGWCommunication::sendPacket(rx_message);
+        callbacks.call(rx_message.header.command, rx_message);
+      } else {
+        callbacks.call(rx_message.header.command, rx_message);
+      }
       return;
     }
 
-    //If the communication with the neuron could not be established, try to send to the message to the RF
-    if (RFGWCommunication::isEnabled()) {
+    //If the communication with the neuron could not be established, try to send to the message to the RF only in the case it is not ble
+    if (RFGWCommunication::isEnabled() && has_neuron_connection != 3) {
+      DBG_PRINTF_TRACE("Sending via rf Command %i from %i", tx_message.header.command, tx_message.header.device);
       RFGWCommunication::sendPacket(tx_message);
     }
   }
@@ -209,13 +226,17 @@ void Communications::init() {
       }
       if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
         has_rf_connection = 1;
-        DBG_PRINTF_TRACE("RF Neuron is available to connect");
+        DBG_PRINTF_TRACE("RF Neuron 2 is available to connect");
       }
       if (p.header.device == Communications_protocol::NEURON_DEFY) {
         has_neuron_connection = 1;
-        DBG_PRINTF_TRACE("Neuron is available to connect");
+        DBG_PRINTF_TRACE("Neuron 2 is available to connect");
       }
-      p.header.device  = device;
+
+      if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
+        has_neuron_connection = 1;
+        DBG_PRINTF_TRACE("Ble Neuron 2 is available to connect");
+      }
       p.header.command = Communications_protocol::CONNECTED;
       uint32_t version = FMW_VERSION;
       memcpy(p.data, &version, sizeof(version));
@@ -246,13 +267,25 @@ void Communications::init() {
       TIMEOUT               = 400;
       DBG_PRINTF_TRACE("Wired Neuron connected");
     }
+    if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
+      has_neuron_connection         = 3;
+      keep_alive_timeout            = 100;
+      TIMEOUT                       = 400;
+      device                        = Communications_protocol::BLE_DEFY_LEFT;
+      RFGWCommunication::relay_host = true;
+      RFGateway::rf_disable();
+      DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected");
+    }
+    DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected %i", p.header.device);
     just_connected = true;
   });
 
-  callbacks.bind(DISCONNECTED, [](Packet const &p) {
+  callbacks.bind(DISCONNECTED, [this](Packet const &p) {
     DBG_PRINTF_TRACE("Received disconnected from %i", p.header.device);
-    rfDisconnection(false);
-    neuronDisconnection();
+    if (has_rf_connection)
+      rfDisconnection(false);
+    if (has_neuron_connection)
+      neuronDisconnection();
     sleep_ms(2000);
   });
 
@@ -269,16 +302,17 @@ void Communications::init() {
     LEDManagement::set_updated(true);
   });
 
-  callbacks.bind(VERSION, [this](Packet p) {
+  callbacks.bind(VERSION, [this](const Packet &p) {
     DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
     uint32_t version = FMW_VERSION;
-    memcpy(p.data, &version, sizeof(version));
-    p.header.size = sizeof(version);
-    sendPacket(p);
+    Packet packet{};
+    memcpy(packet.data, &version, sizeof(version));
+    packet.header.size = sizeof(version);
+    sendPacket(packet);
   });
 
-  callbacks.bind(HAS_KEYS, [this](Packet const &) {
-    DBG_PRINTF_TRACE("Warning why has enter here!");
+  callbacks.bind(HAS_KEYS, [this](Packet const &p) {
+    DBG_PRINTF_TRACE("Has keys replay why has enter here! %i", p.header.device);
     //    sendPacket(p);
   });
 
@@ -289,14 +323,16 @@ void Communications::init() {
 
   callbacks.bind(GET_SHORT_LED, [this](Packet p) {
     DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
-    p.header.size = IS31FL3743B::get_short_leds(p.data);
-    sendPacket(p);
+    Packet packet{};
+    packet.header.size = IS31FL3743B::get_short_leds(packet.data);
+    sendPacket(packet);
   });
 
   callbacks.bind(GET_OPEN_LED, [this](Packet p) {
     DBG_PRINTF_TRACE("Received GET_OPEN_LED from %i ", p.header.device);
-    p.header.size = IS31FL3743B::get_open_leds(p.data);
-    sendPacket(p);
+    Packet packet{};
+    packet.header.size = IS31FL3743B::get_open_leds(packet.data);
+    sendPacket(packet);
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
@@ -452,9 +488,11 @@ void Communications::init() {
 }
 
 bool Communications::sendPacket(Packet packet) {
-  packet.header.device = device;
-  packet.header.crc    = 0;
-  packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
+  if (packet.header.device == Communications_protocol::UNKNOWN) {
+    packet.header.device = device;
+  }
+  packet.header.crc = 0;
+  packet.header.crc = crc8(packet.buf, sizeof(Header) + packet.header.size);
   queue_add_blocking(&txMessages, &packet);
   return true;
 }
