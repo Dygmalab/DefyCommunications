@@ -13,6 +13,9 @@ enum Devices : uint8_t {
   NEURON_DEFY,
   RF_NEURON_DEFY,
   WIRED_NEURON_DEFY,
+  BLE_NEURON_2_DEFY,
+  BLE_DEFY_LEFT,
+  BLE_DEFY_RIGHT,
 };
 
 static_assert(sizeof(Devices) == sizeof(uint8_t));

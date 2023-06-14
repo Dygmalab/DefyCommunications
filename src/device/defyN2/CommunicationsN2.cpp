@@ -37,20 +37,8 @@ void checkActive();
 
 class RFGW_parser {
  public:
-  static void init() {
-    /* Initialize the RF Gateway */
-    rfgw_init();
-
-    /* Enable the RF Gateway */
-    rfgw_enable();
-
-    /* Open the Keyscanner pipes */
-    rfgw_pipe_open(RFGW_PIPE_ID_KEYSCANNER_LEFT);
-    rfgw_pipe_open(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
-  }
-
-
   static void run() {
+    if (!usbd_ready()) return;
     rfgw_poll();
     left.run();
     right.run();
@@ -131,6 +119,7 @@ class RFGW_parser {
     uint16_t rx_buffer_last_index{0};
     std::queue<Packet> tx_messages;
     void sendPacket(Packet &packet) {
+      if (!usbd_ready()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
@@ -157,7 +146,6 @@ void Communications::init() {
 #if COMPILE_SPI2_SUPPORT
   spiPort2.init();
 #endif
-  RFGW_parser::init();
 
   callbacks.bind(CONNECTED, [this](Packet p) {
     p.header.size    = 0;
@@ -196,38 +184,65 @@ void Communications::run() {
 
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
-  packet.header.device   = Communications_protocol::NEURON_DEFY;
   if (device_to_send == UNKNOWN) {
+    if (usbd_ready()) {
 #if COMPILE_SPI0_SUPPORT
-    if (spiPort0Device != UNKNOWN)
-      spiPort0.sendPacket(packet);
+      if (spiPort0Device != UNKNOWN)
+        spiPort0.sendPacket(packet);
 #endif
 #if COMPILE_SPI1_SUPPORT
-    if (spiPort1Device != UNKNOWN)
-      spiPort1.sendPacket(packet);
+      if (spiPort1Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::NEURON_DEFY;
+        spiPort1.sendPacket(packet);
+      }
 #endif
 #if COMPILE_SPI2_SUPPORT
-    if (spiPort2Device != UNKNOWN)
-      spiPort2.sendPacket(packet);
+      if (spiPort2Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::NEURON_DEFY;
+        spiPort2.sendPacket(packet);
+      }
 #endif
+    } else {
+      if (spiPort2Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
+        spiPort2.sendPacket(packet);
+      }
+    }
+
+
     if (RFGW_parser::right.connected)
       RFGW_parser::right.sendPacket(packet);
     if (RFGW_parser::left.connected)
       RFGW_parser::left.sendPacket(packet);
   }
 
+  if (usbd_ready()) {
+
 #if COMPILE_SPI0_SUPPORT
-  if (spiPort0Device == device_to_send)
-    spiPort0.sendPacket(packet);
+    if (spiPort0Device == device_to_send)
+      spiPort0.sendPacket(packet);
 #endif
 #if COMPILE_SPI1_SUPPORT
-  if (spiPort1Device == device_to_send)
-    spiPort1.sendPacket(packet);
+    if (spiPort1Device == device_to_send) {
+      packet.header.device = Communications_protocol::NEURON_DEFY;
+      spiPort1.sendPacket(packet);
+    }
 #endif
 #if COMPILE_SPI2_SUPPORT
-  if (spiPort2Device == device_to_send)
-    spiPort2.sendPacket(packet);
+    if (spiPort2Device == device_to_send) {
+      packet.header.device = Communications_protocol::NEURON_DEFY;
+      spiPort2.sendPacket(packet);
+    }
 #endif
+  } else {
+    if (spiPort2Device != UNKNOWN) {
+      packet.header.device = device_to_send;
+      spiPort2.sendPacket(packet);
+    }
+    //No need to continue RF is disabled in ble mode
+    return true;
+  }
+
   if (RFGW_parser::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
     RFGW_parser::left.sendPacket(packet);
 
