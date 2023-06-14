@@ -13,6 +13,9 @@ enum Devices : uint8_t {
   NEURON_DEFY,
   RF_NEURON_DEFY,
   WIRED_NEURON_DEFY,
+  BLE_NEURON_2_DEFY,
+  BLE_DEFY_LEFT,
+  BLE_DEFY_RIGHT,
 };
 
 static_assert(sizeof(Devices) == sizeof(uint8_t));
@@ -38,10 +41,6 @@ enum Commands : uint8_t {
   LAYER_UNDERGLOW_COLORS,
   GET_OPEN_LED,
   GET_SHORT_LED,
-  //Battery
-  BATTERY_LEVEL = 40,
-  BATTERY_STATUS,
-  BATTERY_SAVING,
   //Config
   SET_SPI_SPEED = 100,
   SET_CLOCK_SPEED,
