@@ -185,23 +185,30 @@ void Communications::run() {
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
   if (device_to_send == UNKNOWN) {
+    if (usbd_ready()) {
 #if COMPILE_SPI0_SUPPORT
-    if (spiPort0Device != UNKNOWN)
-      spiPort0.sendPacket(packet);
+      if (spiPort0Device != UNKNOWN)
+        spiPort0.sendPacket(packet);
 #endif
 #if COMPILE_SPI1_SUPPORT
-    if (spiPort1Device != UNKNOWN) {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      spiPort1.sendPacket(packet);
-    }
+      if (spiPort1Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::NEURON_DEFY;
+        spiPort1.sendPacket(packet);
+      }
 #endif
 #if COMPILE_SPI2_SUPPORT
-    if (spiPort2Device != UNKNOWN) {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      if (!usbd_ready()) packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-      spiPort2.sendPacket(packet);
-    }
+      if (spiPort2Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::NEURON_DEFY;
+        spiPort2.sendPacket(packet);
+      }
 #endif
+    } else {
+      if (spiPort2Device != UNKNOWN) {
+        packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
+        spiPort2.sendPacket(packet);
+      }
+    }
+
 
     if (RFGW_parser::right.connected)
       RFGW_parser::right.sendPacket(packet);
