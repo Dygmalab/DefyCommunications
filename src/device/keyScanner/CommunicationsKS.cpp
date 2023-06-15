@@ -346,7 +346,6 @@ void Communications::init() {
     LEDManagement::set_ledDriver_brightness(driver_brightness);
     LEDManagement::set_max_underglow_brightness(under_glow_brightness);
     LEDManagement::set_underglow_brightness(under_glow_brightness);
-    BatteryManagement::checkLowBatterySavingEffect();
     LEDManagement::set_updated(true);
   });
 
