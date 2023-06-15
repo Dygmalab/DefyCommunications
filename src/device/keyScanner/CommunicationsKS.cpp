@@ -221,19 +221,23 @@ void Communications::init() {
   callbacks.bind(IS_ALIVE, [this](Packet p) {
     if ((!has_neuron_connection && !has_rf_connection)) {
       if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
+        p.header.device       = device;
         has_neuron_connection = 1;
         DBG_PRINTF_TRACE("Wired Neuron is available to connect");
       }
       if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
+        p.header.device   = device;
         has_rf_connection = 1;
         DBG_PRINTF_TRACE("RF Neuron 2 is available to connect");
       }
       if (p.header.device == Communications_protocol::NEURON_DEFY) {
+        p.header.device       = device;
         has_neuron_connection = 1;
         DBG_PRINTF_TRACE("Neuron 2 is available to connect");
       }
 
       if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
+        device                = Communications_protocol::BLE_DEFY_LEFT;
         has_neuron_connection = 1;
         DBG_PRINTF_TRACE("Ble Neuron 2 is available to connect");
       }
@@ -271,7 +275,6 @@ void Communications::init() {
       has_neuron_connection         = 3;
       keep_alive_timeout            = 100;
       TIMEOUT                       = 400;
-      device                        = Communications_protocol::BLE_DEFY_LEFT;
       RFGWCommunication::relay_host = true;
       RFGateway::rf_disable();
       DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected");
@@ -338,11 +341,13 @@ void Communications::init() {
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
     float driver_brightness     = (float)p.data[0] / (float)255;
     float under_glow_brightness = (float)p.data[1] / (float)255;
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %i", p.header.device, driver_brightness, under_glow_brightness);
+    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %f %f", p.header.device, driver_brightness, under_glow_brightness);
     LEDManagement::set_max_ledDriver_brightness(driver_brightness);
     LEDManagement::set_ledDriver_brightness(driver_brightness);
     LEDManagement::set_max_underglow_brightness(under_glow_brightness);
     LEDManagement::set_underglow_brightness(under_glow_brightness);
+    BatteryManagement::checkLowBatterySavingEffect();
+    LEDManagement::set_updated(true);
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
