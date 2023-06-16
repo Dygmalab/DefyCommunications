@@ -46,6 +46,7 @@ enum Commands : uint8_t {
   BATTERY_STATUS,
   BATTERY_SAVING,
   //Config
+  RF_MAC_ADDRESS = 50, 
   SET_SPI_SPEED = 100,
   SET_CLOCK_SPEED,
   SET_LED_DRIVER_PULLUP,
