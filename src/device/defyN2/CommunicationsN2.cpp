@@ -176,10 +176,12 @@ void Communications::run() {
     callbacks.call(packet.header.command, packet);
   }
 #endif
-  if (time_counter.get_millis() % 300 == 0) {
+  static uint32_t timelast = 0;
+  if (time_counter.get_millis() - timelast > 200) {
+    timelast              = time_counter.get_millis();
     packet.header.command = IS_ALIVE;
     packet.header.size    = 1;
-    RFGW_parser::left.sendPacket(packet);
+    RFGW_parser::right.sendPacket(packet);
   }
   RFGW_parser::run();
   checkActive();
