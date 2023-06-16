@@ -3,7 +3,18 @@
 #define KEYSCANNER_COMMUNICATIONS_PROTOCOL_RF_H_
 #include "stdio.h"
 #include "Communications_protocol.h"
+
+#ifdef KEYSCANNER
 #include "RFGateway.hpp"
+#endif
+
+
+#ifdef NRF52_ARCH
+#include "types.h"
+#include "rf_gateway.h"
+#include "memory/buffer.h"
+#include "devices/Dygma/rf_gateway/rfgw_protocol_types.h"
+#endif
 
 namespace Communications_protocol_rf {
 
@@ -38,7 +49,7 @@ typedef struct
   Communications_protocol::Packet packet;
 } parse_t;
 
-static inline result_t parseBuffer(parse_t *p_parse, buffer_t *p_buffer);
+result_t parseBuffer(parse_t *p_parse, buffer_t *p_buffer);
 
 }  // namespace Communications_protocol_rf
 #endif
