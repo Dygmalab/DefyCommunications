@@ -50,25 +50,79 @@ class RFGW_parser {
     explicit Side(rfgw_pipe_id_t pipe)
       : pipe_id(pipe) {}
 
-    void run() {
-      uint16_t pipe_send_loadsize = 0;
-      uint16_t pipe_recv_loadsize = 0;
+    void parseErrProcess(buffer_t *p_buffer) {
+      /*
+     * TODO: Possible parse error should be handled here by letting the upper layer know about the response failure
+     */
 
-      rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
-      rfgw_pipe_get_send_freesize(pipe_id, &pipe_send_loadsize);
+      /* Initiate the search for new packet by skipping the first byte */
+      buffer_update_read_pos(p_buffer, 1);
+    }
 
-      if (pipe_recv_loadsize) {
-        connected             = true;
-        lastTimeCommunication = time_counter.get_millis();
-        rfgw_pipe_recv(pipe_id, &rx_buffer[rx_buffer_last_index], pipe_recv_loadsize);
-        rx_buffer_last_index += pipe_recv_loadsize;
-        checkBuffer();
+    void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
+      if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
+        Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
         if (tx_messages.empty()) {
           Packet packet{};
           packet.header.command = Communications_protocol::IS_ALIVE;
           sendPacket(packet);
         }
+        /* Discard the already processed packet */
+        buffer_update_read_pos(p_buffer, p_parse->pkt_size);
+      } else /* Packet parse failed with clear status code */
+      {
+        /*
+         * TODO: Possible parse error should be handled here by letting the upper layer know about the response failure
+         */
+
+        parseErrProcess(p_buffer);
       }
+    }
+
+    void parseProcess(void) {
+      result_t result = RESULT_ERR;
+      bool result_b;
+      buffer_t *p_buffer_in;
+      Communications_protocol_rf::parse_t parse;
+
+      /* Get the buffer IN */
+      //TODO: Ota handle
+      result_b = rfgw_pipe_recv_buffer_get(pipe_id, &p_buffer_in);
+      ASSERT_DYGMA(result_b == true, "rf_pipe_recv_buffer_get failed");
+
+      /* Parse and process the incoming data */
+      result = parseBuffer(&parse, p_buffer_in);
+
+      switch (result) {
+      case RESULT_OK:
+
+        parseOkProcess(&parse, p_buffer_in);
+
+        break;
+
+      case RESULT_ERR: /* Packet parse failed with un-clear status code */
+
+        parseErrProcess(p_buffer_in);
+
+        break;
+
+      default:
+
+        /*
+             * No or incomplete packet.
+             */
+
+        break;
+      }
+    }
+
+    void run() {
+      uint16_t pipe_send_loadsize = 0;
+      uint16_t pipe_recv_loadsize = 0;
+
+      rfgw_pipe_get_send_freesize(pipe_id, &pipe_send_loadsize);
+      rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
+      parseProcess();
 
       if (!tx_messages.empty()) {
         Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
@@ -80,41 +134,9 @@ class RFGW_parser {
       }
     }
 
-    void checkBuffer() {
-      uint32_t i = 0;
-      do {
-        if (rx_buffer[i++] == DELIMITER) {
-          Packet packet{};
-          //TODO: refactor the check of the max transfer size
-          if (i - 1 > MAX_TRANSFER_SIZE) {
-            //Something happend in the transfer left clear the buffer
-            memset(rx_buffer, 0, i);
-            rx_buffer_last_index -= i;
-            memmove(rx_buffer, &rx_buffer[i], rx_buffer_last_index);
-            memset(&rx_buffer[rx_buffer_last_index], 0, rx_buffer_last_index + i);
-            i = 0;
-            continue;
-          }
-          memcpy(packet.buf, rx_buffer, i);
-          uint8_t check_crc = packet.header.crc;
-          packet.header.crc = 0;
-          if (check_crc == crc8(packet.buf, sizeof(Header) + packet.header.size)) {
-            Communications.callbacks.call(packet.header.command, packet);
-            memset(rx_buffer, 0, i);
-            rx_buffer_last_index -= i;
-            memmove(rx_buffer, &rx_buffer[i], rx_buffer_last_index);
-            memset(&rx_buffer[rx_buffer_last_index], 0, rx_buffer_last_index + i);
-            i = 0;
-          }
-        }
-      } while (i < rx_buffer_last_index);
-    }
-
     bool connected = false;
     rfgw_pipe_id_t pipe_id;
     uint32_t lastTimeCommunication{0};
-    uint8_t rx_buffer[512]{};
-    uint16_t rx_buffer_last_index{0};
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
       if (!usbd_ready()) return;
@@ -176,13 +198,6 @@ void Communications::run() {
     callbacks.call(packet.header.command, packet);
   }
 #endif
-  static uint32_t timelast = 0;
-  if (time_counter.get_millis() - timelast > 200) {
-    timelast              = time_counter.get_millis();
-    packet.header.command = IS_ALIVE;
-    packet.header.size    = 1;
-    RFGW_parser::right.sendPacket(packet);
-  }
   RFGW_parser::run();
   checkActive();
 }

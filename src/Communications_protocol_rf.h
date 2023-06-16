@@ -40,13 +40,22 @@ union WrapperPacket {
 };
 
 
+typedef enum {
+  PARSE_STATUS_SUCCESS = 1,
+
+  PARSE_STATUS_ERR_PACKET_SIZE,
+  PARSE_STATUS_ERR_DELIMITER,
+  PARSE_STATUS_ERR_CRC,
+} parse_status_code_t;
+
+
 typedef struct
 {
   /* Parse status code */
   rfgwp_status_code_t status_code;
   Communications_protocol::Commands pkt_cmd;
   uint8_t pkt_size;
-  Communications_protocol::Packet packet;
+  WrapperPacket wrapperPacket;
 } parse_t;
 
 result_t parseBuffer(parse_t *p_parse, buffer_t *p_buffer);
