@@ -30,7 +30,7 @@ union WrapperPacket {
 
   Communications_protocol::Packet &getPacket() { return packet; }
 
-  uint16_t getSize() const { return packet.header.size + sizeof(delimiter_rf); }
+  uint16_t getSize() const { return sizeof(packet.header) + packet.header.size + sizeof(delimiter_rf); }
 
   struct {
     delimiter_rf delimiter{DELIMITER_RF};
