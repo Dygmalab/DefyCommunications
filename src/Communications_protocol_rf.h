@@ -19,7 +19,7 @@
 namespace Communications_protocol_rf {
 
 using delimiter_rf                               = uint16_t;
-static const constexpr delimiter_rf DELIMITER_RF = 0x4450;
+static const constexpr delimiter_rf DELIMITER_RF = 0x5044;
 static const constexpr uint8_t MAX_TRANSFER_SIZE = sizeof(Communications_protocol::Packet) + sizeof(delimiter_rf);
 
 union WrapperPacket {
