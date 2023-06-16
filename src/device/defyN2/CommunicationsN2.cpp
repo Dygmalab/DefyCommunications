@@ -1,5 +1,6 @@
 #ifdef NRF52_ARCH
 #include "Communications.h"
+#include "Communications_protocol_rf.h"
 #include "SpiPort.h"
 #include "Time_counter.h"
 #include "Usb_serial.h"
@@ -70,13 +71,10 @@ class RFGW_parser {
       }
 
       if (!tx_messages.empty()) {
-        Packet &packet          = tx_messages.front();
-        size_t size_to_transfer = sizeof(Header) + packet.header.size;
+        Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
+        uint16_t size_to_transfer                         = packet.getSize();
         if (pipe_send_loadsize >= size_to_transfer) {
-          uint8_t outputBuffer[MAX_TRANSFER_SIZE + 1]{};
-          memcpy(outputBuffer, packet.buf, size_to_transfer);
-          outputBuffer[size_to_transfer] = DELIMITER;
-          rfgw_pipe_send(pipe_id, outputBuffer, size_to_transfer + 1);
+          rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
           tx_messages.pop();
         }
       }
@@ -117,13 +115,13 @@ class RFGW_parser {
     uint32_t lastTimeCommunication{0};
     uint8_t rx_buffer[512]{};
     uint16_t rx_buffer_last_index{0};
-    std::queue<Packet> tx_messages;
+    std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
       if (!usbd_ready()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
-      tx_messages.push(packet);
+      tx_messages.emplace(packet);
     };
   };
   static Side left;
