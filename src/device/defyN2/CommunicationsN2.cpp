@@ -176,6 +176,11 @@ void Communications::run() {
     callbacks.call(packet.header.command, packet);
   }
 #endif
+  if (time_counter.get_millis() % 300) {
+    packet.header.command = IS_ALIVE;
+    packet.header.size = 1;
+    RFGW_parser::left.sendPacket(packet);
+  }
   RFGW_parser::run();
   checkActive();
 }
