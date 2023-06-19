@@ -1,7 +1,6 @@
 #ifdef KEYSCANNER
 #include <string.h>
 #include "SPI.hpp"
-#include "Config.hpp"
 #include <Keyscanner.hpp>
 #include <IS31FL3743B.hpp>
 #include <LEDManagement.hpp>
@@ -424,72 +423,20 @@ void Communications::init() {
     BatteryManagement::set_battery_saving(p.data[0]);
   });
 
-  //Config
-  callbacks.bind(SET_ENABLE_LED_DRIVER, [](Packet const &p) {
-    uint8_t enable;
-    memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
-    IS31FL3743B::set_enable(enable);
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.led_driver_enabled     = enable;
-    Configuration::set_configuration(configuration);
-  });
-  callbacks.bind(SET_ENABLE_UNDERGLOW, [](Packet const &) {
-    uint8_t enable;
-    memcpy(&enable, &rx_message.data[0], sizeof(uint8_t));
-    gpio_put(UG_EN, enable);
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.underGlow_enabled      = enable;
-    Configuration::set_configuration(configuration);
-  });
-
-  callbacks.bind(ALIVE_INTERVAL, [](Packet const &) {
-    uint32_t pooling_rate_base;
-    uint32_t pooling_rate_variation;
-    memcpy(&pooling_rate_base, &rx_message.data[0], sizeof(uint32_t));
-    memcpy(&pooling_rate_variation, &rx_message.data[sizeof(uint32_t)], sizeof(uint32_t));
-    keep_alive_timeout                              = pooling_rate_base;
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.pooling_rate_base      = pooling_rate_base;
-    configuration.start_info.pooling_rate_variation = pooling_rate_variation;
-    DBG_PRINTF_TRACE("Sending alive interval base %lu and variation %lu", pooling_rate_base, pooling_rate_variation);
-    Configuration::set_configuration(configuration);
-  });
-  callbacks.bind(SET_SPI_SPEED, [](Packet const &) {
-    uint32_t spi_speed_base;
-    uint32_t spi_speed_variation;
-    memcpy(&spi_speed_base, &rx_message.data[0], sizeof(uint32_t));
-    memcpy(&spi_speed_variation, &rx_message.data[sizeof(uint32_t)], sizeof(uint32_t));
-    SPI::set_baudrate(spi_speed_base);
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.spi_speed_base         = spi_speed_base;
-    configuration.start_info.spi_speed_variation    = spi_speed_variation;
-    DBG_PRINTF_TRACE("Sending spi speed base %lu and variation %lu", spi_speed_base, spi_speed_variation);
-    Configuration::set_configuration(configuration);
-  });
-
-  callbacks.bind(SET_CLOCK_SPEED, [](Packet const &) {
-    uint32_t cpu_speed;
-    memcpy(&cpu_speed, &rx_message.data[0], sizeof(uint32_t));
-    set_sys_clock_khz(cpu_speed, true);
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.cpu_speed              = cpu_speed;
-    DBG_PRINTF_TRACE("Setting cpuSpeed to %lu", cpu_speed);
-    Configuration::set_configuration(configuration);
-  });
-
-  callbacks.bind(SET_LED_DRIVER_PULLUP, [](Packet const &) {
-    uint8_t led_driver_pull_up;
-    memcpy(&led_driver_pull_up, &rx_message.data[0], sizeof(uint8_t));
-    Configuration::StartConfiguration configuration = Configuration::get_configuration();
-    configuration.start_info.pull_up_config         = led_driver_pull_up;
-    DBG_PRINTF_TRACE("Setting ledDriver in left side to %i", led_driver_pull_up);
-    Configuration::set_configuration(configuration);
-    IS31FL3743B::setPullUpRegister(led_driver_pull_up);
+  //RF MAC
+  callbacks.bind(RF_ADDRESS, [](Packet const &p) {
+    uint32_t rf_address{};
+    memcpy(&rf_address, p.data, sizeof(rf_address));
+    DBG_PRINTF_TRACE("Received RF_MAC_ADDRESS from %i with value %i", p.header.device, rf_address);
+    if (rf_address != 0) {
+      RFGWCommunication::setAddress(rf_address);
+    };
   });
 
   queue_init(&txMessages, sizeof(Communications_protocol::Packet), 100);
   queue_init(&rxMessages, sizeof(Communications_protocol::Packet), 100);
 }
+
 
 bool Communications::sendPacket(Packet packet) {
   if (packet.header.device == Communications_protocol::UNKNOWN) {
