@@ -61,6 +61,8 @@ class RFGW_parser {
 
     void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
       if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
+        connected             = true;
+        lastTimeCommunication = time_counter.get_millis();
         Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
         if (tx_messages.empty()) {
           Packet packet{};
