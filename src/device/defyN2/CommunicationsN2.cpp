@@ -81,14 +81,13 @@ class RFGW_parser {
 
     void parseProcess(void) {
       result_t result = RESULT_ERR;
-      bool result_b;
       buffer_t *p_buffer_in;
       Communications_protocol_rf::parse_t parse;
 
       /* Get the buffer IN */
-      //TODO: Ota handle
-      result_b = rfgw_pipe_recv_buffer_get(pipe_id, &p_buffer_in);
-      ASSERT_DYGMA(result_b == true, "rf_pipe_recv_buffer_get failed");
+      result = rfgw_pipe_recv_buffer_get(pipe_id, &p_buffer_in);
+      EXIT_IF_NOK( result );
+      //ASSERT_DYGMA(result == RESULT_OK, "rf_pipe_recv_buffer_get failed");
 
       /* Parse and process the incoming data */
       result = parseBuffer(&parse, p_buffer_in);
@@ -114,6 +113,9 @@ class RFGW_parser {
 
         break;
       }
+
+    _EXIT:
+      return;
     }
 
     void run() {
