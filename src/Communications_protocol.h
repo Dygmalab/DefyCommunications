@@ -46,11 +46,7 @@ enum Commands : uint8_t {
   BATTERY_STATUS,
   BATTERY_SAVING,
   //Config
-  SET_SPI_SPEED = 100,
-  SET_CLOCK_SPEED,
-  SET_LED_DRIVER_PULLUP,
-  SET_ENABLE_UNDERGLOW,
-  SET_ENABLE_LED_DRIVER,
+  RF_ADDRESS = 50,
 };
 
 static_assert(sizeof(Commands) == sizeof(uint8_t));
