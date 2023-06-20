@@ -96,7 +96,7 @@ result_t Communications_protocol_rf::parseBuffer(parse_t *p_parse, buffer_t *p_b
   actual_read_pos = buffer_calc_new_pos(p_buffer, actual_read_pos, PKT_FULL_HEADER_SIZE);
 
   /* Check there is enough space to receive the whole packet */
-  if (p_parse->pkt_size >= buffer_get_max_loadsize(p_buffer) || p_parse->pkt_size > sizeof(Communications_protocol::Packet)) {
+  if (p_parse->pkt_size >= buffer_get_max_loadsize(p_buffer) || p_parse->pkt_size > sizeof(Communications_protocol_rf::WrapperPacket)) {
     p_parse->status_code = PARSE_STATUS_ERR_PACKET_SIZE;
     return RESULT_OK;
   }

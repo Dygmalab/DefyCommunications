@@ -72,10 +72,11 @@ void rfDisconnection(bool cleanRf = true) {
 void connectionStateMachine() {
   if (!just_connected) return;
   static uint32_t last_wait_time = 0;
-  if (uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time()); has_rf_connection && ms_since_enter - last_wait_time < 20) {
-    last_wait_time = ms_since_enter;
+  uint32_t ms_since_enter        = to_ms_since_boot(get_absolute_time());
+  if (has_rf_connection && ms_since_enter - last_wait_time < 20) {
     return;
   }
+  last_wait_time = ms_since_enter;
 
   enum class ConnectionState : uint8_t {
     BRIGHTNESS,
@@ -91,6 +92,7 @@ void connectionStateMachine() {
   static uint8_t layer = 0;
 
   Packet p{};
+  DBG_PRINTF_TRACE("Connection state is asking for %i", connectionState);
   switch (connectionState) {
   case ConnectionState::BRIGHTNESS:
     p.header.command = Communications_protocol::BRIGHTNESS;
@@ -155,7 +157,7 @@ void Communications::run() {
   if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     last_time_communication = ms_since_enter;
     Packet packet{};
-    if (KeyScanner.newKey() && !(!has_neuron_connection && !has_rf_connection)) {
+    if (KeyScanner.newKey()) {
       KeyScanner.keyState(false);
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
@@ -362,8 +364,8 @@ void Communications::init() {
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
     uint8_t layerIndex = p.data[0];
+    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
@@ -390,8 +392,8 @@ void Communications::init() {
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
-    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i ", p.header.device);
     uint8_t layerIndex = p.data[0];
+    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
