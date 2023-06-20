@@ -254,7 +254,7 @@ void Communications::init() {
 
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
       has_rf_connection  = 2;
-      keep_alive_timeout = 1000;
+      keep_alive_timeout = 300;
       TIMEOUT            = 2000;
       DBG_PRINTF_TRACE("RF connected");
     }
