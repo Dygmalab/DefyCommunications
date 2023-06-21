@@ -43,12 +43,12 @@ void cleanQueues() {
 
 void neuronDisconnection() {
   DBG_PRINTF_TRACE("Wired Neuron disconnected\n");
-  if (has_neuron_connection != 3) {
-    has_neuron_connection = false;
-  } else {
+  if (RFGWCommunication::relay_host) {
     device                        = Communications_protocol::KEYSCANNER_DEFY_LEFT;
     RFGWCommunication::relay_host = false;
     RFGateway::rf_disable();
+  } else {
+    has_neuron_connection = false;
   }
   LEDManagement::set_mode_disconnected();
   //Clean queue
