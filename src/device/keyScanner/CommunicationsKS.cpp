@@ -13,15 +13,16 @@
 #include "BatteryManagement.hpp"
 
 constexpr uint8_t SIDE_ID = 25;
-static uint32_t TIMEOUT   = 900;
+static uint32_t TIMEOUT   = 400;
 queue_t txMessages;
 queue_t rxMessages;
 Communications_protocol::Packet tx_message;
 Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
+Communications_protocol::Devices connectedTo;
 bool need_polling{false};
 uint32_t last_time_communication;
-uint16_t keep_alive_timeout = 600;
+uint16_t keep_alive_timeout = 100;
 
 //TODO: Create enum state for connections
 uint8_t has_neuron_connection           = 0;
@@ -70,16 +71,10 @@ void rfDisconnection(bool cleanRf = true) {
 }
 
 void connectionStateMachine() {
-  if (!just_connected) return;
-  static uint32_t last_wait_time = 0;
-  uint32_t ms_since_enter        = to_ms_since_boot(get_absolute_time());
-  if (has_rf_connection && ms_since_enter - last_wait_time < 20) {
-    return;
-  }
-  last_wait_time = ms_since_enter;
-
   enum class ConnectionState : uint8_t {
     BRIGHTNESS,
+    BATTERY_STATUS,
+    BATTERY_LEVEL,
     BATTERY_SAVING,
     PALETTE,
     FIRST_LAYER_KEYMAP_COLOR,
@@ -88,8 +83,21 @@ void connectionStateMachine() {
     NEXT_LAYER,
     NEXT_UNDERGLOW,
   };
+
   static ConnectionState connectionState;
+
   static uint8_t layer = 0;
+  if (!just_connected) {
+    connectionState = ConnectionState::BRIGHTNESS;
+    layer           = 0;
+    return;
+  }
+  static uint32_t last_wait_time = 0;
+  uint32_t ms_since_enter        = to_ms_since_boot(get_absolute_time());
+  if (connectedTo != Communications_protocol::NEURON_DEFY && connectedTo != Communications_protocol::WIRED_NEURON_DEFY && ms_since_enter - last_wait_time < 50) {
+    last_wait_time = ms_since_enter;
+    return;
+  }
 
   Packet p{};
   DBG_PRINTF_TRACE("Connection state is asking for %i", connectionState);
@@ -97,6 +105,17 @@ void connectionStateMachine() {
   case ConnectionState::BRIGHTNESS:
     p.header.command = Communications_protocol::BRIGHTNESS;
     Communications.sendPacket(p);
+    if (connectedTo == Communications_protocol::WIRED_NEURON_DEFY)
+      connectionState = ConnectionState::PALETTE;
+    else
+      connectionState = ConnectionState::BATTERY_STATUS;
+    break;
+  case ConnectionState::BATTERY_STATUS:
+    RFGateway::chg_status_get();
+    connectionState = ConnectionState::BATTERY_LEVEL;
+    break;
+  case ConnectionState::BATTERY_LEVEL:
+    RFGateway::bat_level_get();
     connectionState = ConnectionState::BATTERY_SAVING;
     break;
   case ConnectionState::BATTERY_SAVING: {
@@ -154,14 +173,15 @@ void connectionStateMachine() {
 void Communications::run() {
   connectionStateMachine();
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
-  if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
-    last_time_communication = ms_since_enter;
+  if (ms_since_enter - std::max(last_time_communication, RFGWCommunication::last_time_communication_rf) > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     Packet packet{};
     if (KeyScanner.newKey()) {
+      DBG_PRINTF_TRACE("New key detected");
       KeyScanner.keyState(false);
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
     } else {
+      DBG_PRINTF_TRACE("Adding is alive");
       packet.header.command = IS_ALIVE;
       packet.header.size    = 0;
     }
@@ -206,6 +226,7 @@ void Communications::run() {
   }
 
   if (has_rf_connection && ms_since_enter - RFGWCommunication::last_time_communication_rf > TIMEOUT) {
+    DBG_PRINTF_TRACE("RF disconnected %i %i %i %i", to_ms_since_boot(get_absolute_time()), ms_since_enter, RFGWCommunication::last_time_communication_rf, ms_since_enter - RFGWCommunication::last_time_communication_rf);
     rfDisconnection();
   }
 }
@@ -256,8 +277,8 @@ void Communications::init() {
 
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
       has_rf_connection  = 2;
-      keep_alive_timeout = 300;
-      TIMEOUT            = 2000;
+      keep_alive_timeout = 100;
+      TIMEOUT            = 1500;
       DBG_PRINTF_TRACE("RF connected");
     }
     if (p.header.device == Communications_protocol::NEURON_DEFY) {
@@ -274,13 +295,14 @@ void Communications::init() {
     }
     if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
       has_neuron_connection         = 3;
-      keep_alive_timeout            = 100;
-      TIMEOUT                       = 400;
+      keep_alive_timeout            = 200;
+      TIMEOUT                       = 1500;
       RFGWCommunication::relay_host = true;
       RFGateway::rf_disable();
       DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected");
     }
     DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected %i", p.header.device);
+    connectedTo    = p.header.device;
     just_connected = true;
   });
 
@@ -290,7 +312,7 @@ void Communications::init() {
       rfDisconnection(false);
     if (has_neuron_connection)
       neuronDisconnection();
-    sleep_ms(2000);
+    sleep_ms(4000);
   });
 
   callbacks.bind(SLEEP, [](Packet const &p) {
@@ -441,6 +463,7 @@ void Communications::init() {
 
 
 bool Communications::sendPacket(Packet packet) {
+  last_time_communication = to_ms_since_boot(get_absolute_time());
   if (packet.header.device == Communications_protocol::UNKNOWN) {
     packet.header.device = device;
   }
