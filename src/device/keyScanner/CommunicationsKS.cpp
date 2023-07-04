@@ -94,7 +94,7 @@ void connectionStateMachine() {
   }
   static uint32_t last_wait_time = 0;
   uint32_t ms_since_enter        = to_ms_since_boot(get_absolute_time());
-  if (connectedTo != Communications_protocol::NEURON_DEFY && connectedTo != Communications_protocol::WIRED_NEURON_DEFY && ms_since_enter - last_wait_time < 50) {
+  if (ms_since_enter - last_wait_time < 50) {
     last_wait_time = ms_since_enter;
     return;
   }
@@ -183,7 +183,8 @@ void Communications::run() {
     } else {
       DBG_PRINTF_TRACE("Adding is alive");
       packet.header.command = IS_ALIVE;
-      packet.header.size    = 0;
+      packet.data[0]        = HAS_KEYS;
+      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
     }
     sendPacket(packet);
   }
@@ -277,7 +278,7 @@ void Communications::init() {
 
     if (p.header.device == Communications_protocol::RF_NEURON_DEFY) {
       has_rf_connection  = 2;
-      keep_alive_timeout = 100;
+      keep_alive_timeout = 150;
       TIMEOUT            = 1500;
       DBG_PRINTF_TRACE("RF connected");
     }
