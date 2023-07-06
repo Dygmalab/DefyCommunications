@@ -94,79 +94,77 @@ void connectionStateMachine() {
   }
   static uint32_t last_wait_time = 0;
   uint32_t ms_since_enter        = to_ms_since_boot(get_absolute_time());
-  if (ms_since_enter - last_wait_time < 50) {
+  if (ms_since_enter - last_wait_time > 50) {
     last_wait_time = ms_since_enter;
-    return;
-  }
-
-  Packet p{};
-  DBG_PRINTF_TRACE("Connection state is asking for %i", connectionState);
-  switch (connectionState) {
-  case ConnectionState::BRIGHTNESS:
-    p.header.command = Communications_protocol::BRIGHTNESS;
-    Communications.sendPacket(p);
-    if (connectedTo == Communications_protocol::WIRED_NEURON_DEFY)
+    Packet p{};
+    DBG_PRINTF_TRACE("Connection state is asking for %i", connectionState);
+    switch (connectionState) {
+    case ConnectionState::BRIGHTNESS:
+      p.header.command = Communications_protocol::BRIGHTNESS;
+      Communications.sendPacket(p);
+      if (connectedTo == Communications_protocol::WIRED_NEURON_DEFY)
+        connectionState = ConnectionState::PALETTE;
+      else
+        connectionState = ConnectionState::BATTERY_STATUS;
+      break;
+    case ConnectionState::BATTERY_STATUS:
+      RFGateway::chg_status_get();
+      connectionState = ConnectionState::BATTERY_LEVEL;
+      break;
+    case ConnectionState::BATTERY_LEVEL:
+      RFGateway::bat_level_get();
+      connectionState = ConnectionState::BATTERY_SAVING;
+      break;
+    case ConnectionState::BATTERY_SAVING: {
+      p.header.command = Communications_protocol::BATTERY_SAVING;
+      Communications.sendPacket(p);
       connectionState = ConnectionState::PALETTE;
-    else
-      connectionState = ConnectionState::BATTERY_STATUS;
-    break;
-  case ConnectionState::BATTERY_STATUS:
-    RFGateway::chg_status_get();
-    connectionState = ConnectionState::BATTERY_LEVEL;
-    break;
-  case ConnectionState::BATTERY_LEVEL:
-    RFGateway::bat_level_get();
-    connectionState = ConnectionState::BATTERY_SAVING;
-    break;
-  case ConnectionState::BATTERY_SAVING: {
-    p.header.command = Communications_protocol::BATTERY_SAVING;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::PALETTE;
-  } break;
-  case ConnectionState::PALETTE:
-    p.header.command = Communications_protocol::PALETTE_COLORS;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::FIRST_LAYER_KEYMAP_COLOR;
-    break;
-  case ConnectionState::FIRST_LAYER_KEYMAP_COLOR:
-    p.header.size    = 1;
-    p.data[0]        = layer;
-    p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION;
-    break;
-  case ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION:
-    p.header.size    = 1;
-    p.data[0]        = layer++;
-    p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::LED_MODE;
-    break;
-  case ConnectionState::LED_MODE:
-    p.header.command = Communications_protocol::MODE_LED;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::NEXT_LAYER;
-    break;
-  case ConnectionState::NEXT_LAYER:
-    p.header.size    = 1;
-    p.data[0]        = layer;
-    p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
-    Communications.sendPacket(p);
-    connectionState = ConnectionState::NEXT_UNDERGLOW;
-    break;
-  case ConnectionState::NEXT_UNDERGLOW:
-    p.header.size    = 1;
-    p.data[0]        = layer++;
-    p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
-    Communications.sendPacket(p);
-    if (layer == 10) {
-      just_connected  = false;
-      layer           = 0;
-      connectionState = ConnectionState::BRIGHTNESS;
-    } else {
+    } break;
+    case ConnectionState::PALETTE:
+      p.header.command = Communications_protocol::PALETTE_COLORS;
+      Communications.sendPacket(p);
+      connectionState = ConnectionState::FIRST_LAYER_KEYMAP_COLOR;
+      break;
+    case ConnectionState::FIRST_LAYER_KEYMAP_COLOR:
+      p.header.size    = 1;
+      p.data[0]        = layer;
+      p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
+      Communications.sendPacket(p);
+      connectionState = ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION;
+      break;
+    case ConnectionState::FIRST_LAYER_UNDERGLOW_CONNECTION:
+      p.header.size    = 1;
+      p.data[0]        = layer++;
+      p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
+      Communications.sendPacket(p);
+      connectionState = ConnectionState::LED_MODE;
+      break;
+    case ConnectionState::LED_MODE:
+      p.header.command = Communications_protocol::MODE_LED;
+      Communications.sendPacket(p);
       connectionState = ConnectionState::NEXT_LAYER;
+      break;
+    case ConnectionState::NEXT_LAYER:
+      p.header.size    = 1;
+      p.data[0]        = layer;
+      p.header.command = Communications_protocol::LAYER_KEYMAP_COLORS;
+      Communications.sendPacket(p);
+      connectionState = ConnectionState::NEXT_UNDERGLOW;
+      break;
+    case ConnectionState::NEXT_UNDERGLOW:
+      p.header.size    = 1;
+      p.data[0]        = layer++;
+      p.header.command = Communications_protocol::LAYER_UNDERGLOW_COLORS;
+      Communications.sendPacket(p);
+      if (layer == 10) {
+        just_connected  = false;
+        layer           = 0;
+        connectionState = ConnectionState::BRIGHTNESS;
+      } else {
+        connectionState = ConnectionState::NEXT_LAYER;
+      }
+      break;
     }
-    break;
   }
 }
 
@@ -183,8 +181,8 @@ void Communications::run() {
     } else {
       DBG_PRINTF_TRACE("Adding is alive");
       packet.header.command = IS_ALIVE;
-//      packet.data[0]        = HAS_KEYS;
-//      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
+      //      packet.data[0]        = HAS_KEYS;
+      //      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
     }
     sendPacket(packet);
   }
@@ -302,7 +300,6 @@ void Communications::init() {
       RFGateway::rf_disable();
       DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected");
     }
-    DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected %i", p.header.device);
     connectedTo    = p.header.device;
     just_connected = true;
   });
