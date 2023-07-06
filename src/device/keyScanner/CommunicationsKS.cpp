@@ -183,8 +183,8 @@ void Communications::run() {
     } else {
       DBG_PRINTF_TRACE("Adding is alive");
       packet.header.command = IS_ALIVE;
-      packet.data[0]        = HAS_KEYS;
-      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
+//      packet.data[0]        = HAS_KEYS;
+//      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
     }
     sendPacket(packet);
   }
