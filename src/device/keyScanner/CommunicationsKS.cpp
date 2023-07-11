@@ -178,11 +178,12 @@ void Communications::run() {
       KeyScanner.keyState(false);
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
+      DBG_PRINTF_TRACE("Got key state %i %i %i %i %i", packet.data[0], packet.data[1], packet.data[2], packet.data[3], packet.data[4  ]);
     } else {
       DBG_PRINTF_TRACE("Adding is alive");
       packet.header.command = IS_ALIVE;
-      //      packet.data[0]        = HAS_KEYS;
-      //      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
+      packet.data[0]        = HAS_KEYS;
+      packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
     }
     sendPacket(packet);
   }
@@ -360,9 +361,9 @@ void Communications::init() {
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
-    float driver_brightness     = (float)p.data[0] / (float)255;
-    float under_glow_brightness = (float)p.data[1] / (float)255;
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %f %f", p.header.device, driver_brightness, under_glow_brightness);
+    float driver_brightness     = BatteryManagement::mapRange(p.data[0], 0, 255, 0, 1);
+    float under_glow_brightness = BatteryManagement::mapRange(p.data[1], 0, 255, 0, 0.5);
+    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %f %i %f", p.header.device, p.data[0], driver_brightness, p.data[1], under_glow_brightness);
     LEDManagement::set_max_ledDriver_brightness(driver_brightness);
     LEDManagement::set_ledDriver_brightness(driver_brightness);
     LEDManagement::set_max_underglow_brightness(under_glow_brightness);
