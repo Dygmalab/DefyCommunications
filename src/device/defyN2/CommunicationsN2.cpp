@@ -7,6 +7,7 @@
 #include "rfgw_config_app.h"
 #include "rf_gateway.h"
 #include "CRC_wrapper.h"
+#include "Arduino.h"
 
 extern Usb_serial usb_serial;  // It is declared in main.cpp
 
@@ -62,13 +63,9 @@ class RFGW_parser {
     void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
       if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
         connected             = true;
-        lastTimeCommunication = time_counter.get_millis();
+        NRF_LOG_DEBUG("Got packet took %i %i %i %i",millis() - lastTimeCommunication,p_parse->wrapperPacket.packet.header.device,p_parse->pkt_cmd,pipe_id);
+        lastTimeCommunication = millis();
         Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
-        if (tx_messages.empty()) {
-          Packet packet{};
-          packet.header.command = Communications_protocol::IS_ALIVE;
-          sendPacket(packet);
-        }
         /* Discard the already processed packet */
         buffer_update_read_pos(p_buffer, p_parse->pkt_size);
       } else /* Packet parse failed with clear status code */
@@ -128,19 +125,28 @@ class RFGW_parser {
       rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
       parseProcess();
 
+      if (tx_messages.empty() && millis() - lastTimeCommunicationSend > 150 && connected) {
+        Packet packet{};
+        packet.header.command = Communications_protocol::IS_ALIVE;
+        sendPacket(packet);
+      }
+
       if (!tx_messages.empty()) {
         Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
         uint16_t size_to_transfer                         = packet.getSize();
         if (pipe_send_loadsize >= size_to_transfer) {
+//          NRF_LOG_DEBUG("Sending packet took %i %i %i %i",millis() - lastTimeCommunicationSend,packet.packet.header.device,packet.packet.header.command,pipe_id);
           rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
           tx_messages.pop();
+          lastTimeCommunicationSend = millis();
         }
       }
     }
 
     bool connected = false;
     rfgw_pipe_id_t pipe_id;
-    uint32_t lastTimeCommunication{0};
+    uint64_t lastTimeCommunication{0};
+    uint64_t lastTimeCommunicationSend{0};
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
       if (!usbd_ready()) return;
@@ -183,7 +189,7 @@ void Communications::run() {
   Packet packet{};
 #if COMPILE_SPI0_SUPPORT
   if (spiPort0.readPacket(packet)) {
-    spiPort0LastCommunication = time_counter.get_millis();
+    spiPort0LastCommunication = millis();
     spiPort0Device            = packet.header.device;
     callbacks.call(packet.header.command, packet);
   }
@@ -191,13 +197,13 @@ void Communications::run() {
 #if COMPILE_SPI2_SUPPORT
   if (spiPort1.readPacket(packet)) {
     spiPort1Device            = packet.header.device;
-    spiPort1LastCommunication = time_counter.get_millis();
+    spiPort1LastCommunication = millis();
     callbacks.call(packet.header.command, packet);
   }
 #endif
 #if COMPILE_SPI2_SUPPORT
   if (spiPort2.readPacket(packet)) {
-    spiPort2LastCommunication = time_counter.get_millis();
+    spiPort2LastCommunication = millis();
     spiPort2Device            = packet.header.device;
     callbacks.call(packet.header.command, packet);
   }
@@ -282,40 +288,37 @@ void checkActive() {
   Packet packet;
 
 #if COMPILE_SPI0_SUPPORT
-  if (spiPort0Device == UNKNOWN)
-    return;
-  now_active = time_counter.get_millis() - spiPort0LastCommunication <= timeout;
-  if (!now_active) {
-    spiPort0Device = UNKNOWN;
-    while (spiPort0.readPacket(packet)) {}
-    return;
+  if (spiPort0Device != UNKNOWN){
+    now_active = millis() - spiPort0LastCommunication <= timeout;
+    if (!now_active) {
+      spiPort0Device = UNKNOWN;
+      while (spiPort0.readPacket(packet)) {}
+    }
   }
 #endif
 
 #if COMPILE_SPI1_SUPPORT
-  if (spiPort1Device == UNKNOWN)
-    return;
-  now_active = time_counter.get_millis() - spiPort1LastCommunication <= TIMEOUT;
-  if (!now_active) {
-    spiPort1Device = UNKNOWN;
-    //Remove all the left packets at disconnections
-    while (spiPort1.readPacket(packet)) {}
-    return;
+  if (spiPort1Device != UNKNOWN){
+    now_active = millis() - spiPort1LastCommunication <= TIMEOUT;
+    if (!now_active) {
+      spiPort1Device = UNKNOWN;
+      //Remove all the left packets at disconnections
+      while (spiPort1.readPacket(packet)) {}
+    }
   }
 #endif
 
 #if COMPILE_SPI2_SUPPORT
-  if (spiPort2Device == UNKNOWN)
-    return;
-  now_active = time_counter.get_millis() - spiPort2LastCommunication <= TIMEOUT;
-  if (!now_active) {
-    spiPort2Device = UNKNOWN;
-    //Remove all the left packets at disconnections
-    while (spiPort2.readPacket(packet)) {}
-    return;
+  if (spiPort2Device != UNKNOWN){
+    now_active = millis() - spiPort2LastCommunication <= TIMEOUT;
+    if (!now_active) {
+      spiPort2Device = UNKNOWN;
+      //Remove all the left packets at disconnections
+      while (spiPort2.readPacket(packet)) {}
+    }
   }
 #endif
-  now_active = time_counter.get_millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
+  now_active = millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
   if (!now_active) {
     RFGW_parser::left.connected = false;
     while (!RFGW_parser::left.tx_messages.empty()) {
@@ -323,7 +326,7 @@ void checkActive() {
     }
   }
 
-  now_active = time_counter.get_millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
+  now_active = millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
   if (!now_active) {
     RFGW_parser::right.connected = false;
     while (!RFGW_parser::right.tx_messages.empty()) {

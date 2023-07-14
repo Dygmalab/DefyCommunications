@@ -54,7 +54,7 @@ void neuronDisconnection() {
   LEDManagement::set_mode_disconnected();
   //Clean queue
   cleanQueues();
-  keep_alive_timeout = 600;
+  keep_alive_timeout = 150;
   just_connected     = false;
 }
 
@@ -66,7 +66,7 @@ void rfDisconnection(bool cleanRf = true) {
   cleanQueues();
   if (cleanRf)
     RFGWCommunication::cleanMessages();
-  keep_alive_timeout = 600;
+  keep_alive_timeout = 150;
   just_connected     = false;
 }
 
@@ -168,25 +168,27 @@ void connectionStateMachine() {
   }
 }
 
+
 void Communications::run() {
   connectionStateMachine();
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
-  if (ms_since_enter - std::max(last_time_communication, RFGWCommunication::last_time_communication_rf) > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
+  if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     Packet packet{};
     if (KeyScanner.newKey()) {
       DBG_PRINTF_TRACE("New key detected");
       KeyScanner.keyState(false);
       packet.header.command = Communications_protocol::HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(packet.data);
-      DBG_PRINTF_TRACE("Got key state %i %i %i %i %i", packet.data[0], packet.data[1], packet.data[2], packet.data[3], packet.data[4  ]);
+      DBG_PRINTF_TRACE("Got key state %i %i %i %i %i %i", packet.data[0], packet.data[1], packet.data[2], packet.data[3], packet.data[4], ms_since_enter - last_time_communication);
     } else {
-      DBG_PRINTF_TRACE("Adding is alive");
+      DBG_PRINTF_TRACE("Adding is alive %i", ms_since_enter - last_time_communication);
       packet.header.command = IS_ALIVE;
       packet.data[0]        = HAS_KEYS;
       packet.header.size    = KeyScanner.readMatrix(&packet.data[1]) + 1;
     }
     sendPacket(packet);
   }
+
 
   if (!queue_is_empty(&txMessages)) {
     queue_remove_blocking(&txMessages, &tx_message);
@@ -337,8 +339,11 @@ void Communications::init() {
   });
 
   callbacks.bind(HAS_KEYS, [this](Packet const &p) {
-    DBG_PRINTF_TRACE("Has keys replay why has enter here! %i", p.header.device);
-    //    sendPacket(p);
+      DBG_PRINTF_ERROR("Why this is has keys %i",p.header.device);
+      for (int i = 0; i < MAX_TRANSFER_SIZE;i++) {
+        DBG_PRINTF_ERROR("%i", p.buf[i]);
+      }
+      sendPacket(p);
   });
 
   callbacks.bind(KEYSCAN_INTERVAL, [](Packet const &p) {
