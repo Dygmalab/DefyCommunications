@@ -311,6 +311,9 @@ void checkActive() {
   if (spiPort1Device != UNKNOWN){
     now_active = millis() - spiPort1LastCommunication <= TIMEOUT;
     if (!now_active) {
+      packet.header.command = Communications_protocol::DISCONNECTED;
+      packet.header.device = spiPort1Device;
+      Communications.callbacks.call(packet.header.command, packet);
       spiPort1Device = UNKNOWN;
       //Remove all the left packets at disconnections
       while (spiPort1.readPacket(packet)) {}
@@ -322,25 +325,38 @@ void checkActive() {
   if (spiPort2Device != UNKNOWN){
     now_active = millis() - spiPort2LastCommunication <= TIMEOUT;
     if (!now_active) {
+      packet.header.command = Communications_protocol::DISCONNECTED;
+      packet.header.device = spiPort1Device;
+      Communications.callbacks.call(packet.header.command, packet);
       spiPort2Device = UNKNOWN;
       //Remove all the left packets at disconnections
       while (spiPort2.readPacket(packet)) {}
     }
   }
 #endif
-  now_active = millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
-  if (!now_active) {
-    RFGW_parser::left.connected = false;
-    while (!RFGW_parser::left.tx_messages.empty()) {
-      RFGW_parser::left.tx_messages.pop();
+  if (RFGW_parser::left.connected){
+    now_active = millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
+    if (!now_active) {
+      packet.header.command = Communications_protocol::DISCONNECTED;
+      packet.header.device = Communications_protocol::RF_DEFY_LEFT;
+      Communications.callbacks.call(packet.header.command, packet);
+      RFGW_parser::left.connected = false;
+      while (!RFGW_parser::left.tx_messages.empty()) {
+        RFGW_parser::left.tx_messages.pop();
+      }
     }
   }
 
-  now_active = millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
-  if (!now_active) {
-    RFGW_parser::right.connected = false;
-    while (!RFGW_parser::right.tx_messages.empty()) {
-      RFGW_parser::right.tx_messages.pop();
+  if(RFGW_parser::right.connected){
+    now_active = millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
+    if (!now_active) {
+      packet.header.command = Communications_protocol::DISCONNECTED;
+      packet.header.device = Communications_protocol::RF_DEFY_RIGHT;
+      Communications.callbacks.call(packet.header.command, packet);
+      RFGW_parser::right.connected = false;
+      while (!RFGW_parser::right.tx_messages.empty()) {
+        RFGW_parser::right.tx_messages.pop();
+      }
     }
   }
 }
