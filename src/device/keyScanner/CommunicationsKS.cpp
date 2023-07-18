@@ -207,7 +207,7 @@ void Communications::run() {
       if (rx_message.header.device == Communications_protocol::BLE_DEFY_RIGHT) {
         RFGWCommunication::sendPacket(rx_message);
       } else if (rx_message.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
-        if (has_neuron_connection == 3)
+        if (has_neuron_connection == 3 && !gpio_get(SIDE_ID))
           RFGWCommunication::sendPacket(rx_message);
         callbacks.call(rx_message.header.command, rx_message);
       } else {
@@ -261,7 +261,9 @@ void Communications::init() {
       }
 
       if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
-        device                = Communications_protocol::BLE_DEFY_LEFT;
+        if (!gpio_get(SIDE_ID)) {
+          device = Communications_protocol::BLE_DEFY_LEFT;
+        }
         has_neuron_connection = 1;
         DBG_PRINTF_TRACE("Ble Neuron 2 is available to connect");
       }
@@ -296,11 +298,17 @@ void Communications::init() {
       DBG_PRINTF_TRACE("Wired Neuron connected");
     }
     if (p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
-      has_neuron_connection         = 3;
-      keep_alive_timeout            = 200;
-      TIMEOUT                       = 1500;
-      RFGWCommunication::relay_host = true;
-      RFGateway::rf_disable();
+      if (!gpio_get(SIDE_ID)) {
+        has_neuron_connection         = 3;
+        keep_alive_timeout            = 200;
+        TIMEOUT                       = 1500;
+        RFGWCommunication::relay_host = true;
+        RFGateway::rf_disable();
+      } else {
+        has_neuron_connection = 2;
+        keep_alive_timeout    = 100;
+        TIMEOUT               = 400;
+      }
       DBG_PRINTF_TRACE("Ble Neuron 2 Neuron connected");
     }
     connectedTo    = p.header.device;
@@ -339,11 +347,11 @@ void Communications::init() {
   });
 
   callbacks.bind(HAS_KEYS, [this](Packet const &p) {
-      DBG_PRINTF_ERROR("Why this is has keys %i",p.header.device);
-      for (int i = 0; i < MAX_TRANSFER_SIZE;i++) {
-        DBG_PRINTF_ERROR("%i", p.buf[i]);
-      }
-      sendPacket(p);
+    DBG_PRINTF_ERROR("Why this is has keys %i", p.header.device);
+    for (int i = 0; i < MAX_TRANSFER_SIZE; i++) {
+      DBG_PRINTF_ERROR("%i", p.buf[i]);
+    }
+    sendPacket(p);
   });
 
   callbacks.bind(KEYSCAN_INTERVAL, [](Packet const &p) {
