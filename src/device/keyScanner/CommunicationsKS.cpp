@@ -326,15 +326,12 @@ void Communications::init() {
 
   callbacks.bind(SLEEP, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received SLEEP from %i", p.header.device);
-    IS31FL3743B::set_enable(false);
-    LEDManagement::set_enable_underGlow(false);
+    LEDManagement::turnPowerOff();
   });
 
   callbacks.bind(WAKE_UP, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received WAKE_UP from %i", p.header.device);
-    IS31FL3743B::set_enable(true);
-    LEDManagement::set_enable_underGlow(true);
-    LEDManagement::set_updated(true);
+    LEDManagement::turnPowerOn();
   });
 
   callbacks.bind(VERSION, [this](const Packet &p) {
