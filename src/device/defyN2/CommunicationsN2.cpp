@@ -62,8 +62,8 @@ class RFGW_parser {
 
     void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
       if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
-        connected             = true;
-        NRF_LOG_DEBUG("Got packet took %i %i %i %i",millis() - lastTimeCommunication,p_parse->wrapperPacket.packet.header.device,p_parse->pkt_cmd,pipe_id);
+        connected = true;
+        NRF_LOG_DEBUG("Got packet took %i %i %i %i", millis() - lastTimeCommunication, p_parse->wrapperPacket.packet.header.device, p_parse->pkt_cmd, pipe_id);
         lastTimeCommunication = millis();
         Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
         /* Discard the already processed packet */
@@ -85,7 +85,7 @@ class RFGW_parser {
 
       /* Get the buffer IN */
       result = rfgw_pipe_recv_buffer_get(pipe_id, &p_buffer_in);
-      EXIT_IF_NOK( result );
+      EXIT_IF_NOK(result);
       //ASSERT_DYGMA(result == RESULT_OK, "rf_pipe_recv_buffer_get failed");
 
       /* Parse and process the incoming data */
@@ -135,7 +135,7 @@ class RFGW_parser {
         Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
         uint16_t size_to_transfer                         = packet.getSize();
         if (pipe_send_loadsize >= size_to_transfer) {
-//          NRF_LOG_DEBUG("Sending packet took %i %i %i %i",millis() - lastTimeCommunicationSend,packet.packet.header.device,packet.packet.header.command,pipe_id);
+          //          NRF_LOG_DEBUG("Sending packet took %i %i %i %i",millis() - lastTimeCommunicationSend,packet.packet.header.device,packet.packet.header.command,pipe_id);
           rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
           tx_messages.pop();
           lastTimeCommunicationSend = millis();
@@ -248,6 +248,7 @@ bool Communications::sendPacket(Packet packet) {
       RFGW_parser::right.sendPacket(packet);
     if (RFGW_parser::left.connected)
       RFGW_parser::left.sendPacket(packet);
+    return true;
   }
 
   if (usbd_ready()) {
@@ -298,7 +299,7 @@ void checkActive() {
   Packet packet;
 
 #if COMPILE_SPI0_SUPPORT
-  if (spiPort0Device != UNKNOWN){
+  if (spiPort0Device != UNKNOWN) {
     now_active = millis() - spiPort0LastCommunication <= timeout;
     if (!now_active) {
       spiPort0Device = UNKNOWN;
@@ -308,11 +309,11 @@ void checkActive() {
 #endif
 
 #if COMPILE_SPI1_SUPPORT
-  if (spiPort1Device != UNKNOWN){
+  if (spiPort1Device != UNKNOWN) {
     now_active = millis() - spiPort1LastCommunication <= TIMEOUT;
     if (!now_active) {
       packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device = spiPort1Device;
+      packet.header.device  = spiPort1Device;
       Communications.callbacks.call(packet.header.command, packet);
       spiPort1Device = UNKNOWN;
       //Remove all the left packets at disconnections
@@ -322,11 +323,11 @@ void checkActive() {
 #endif
 
 #if COMPILE_SPI2_SUPPORT
-  if (spiPort2Device != UNKNOWN){
+  if (spiPort2Device != UNKNOWN) {
     now_active = millis() - spiPort2LastCommunication <= TIMEOUT;
     if (!now_active) {
       packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device = spiPort1Device;
+      packet.header.device  = spiPort1Device;
       Communications.callbacks.call(packet.header.command, packet);
       spiPort2Device = UNKNOWN;
       //Remove all the left packets at disconnections
@@ -334,11 +335,11 @@ void checkActive() {
     }
   }
 #endif
-  if (RFGW_parser::left.connected){
+  if (RFGW_parser::left.connected) {
     now_active = millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
     if (!now_active) {
       packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device = Communications_protocol::RF_DEFY_LEFT;
+      packet.header.device  = Communications_protocol::RF_DEFY_LEFT;
       Communications.callbacks.call(packet.header.command, packet);
       RFGW_parser::left.connected = false;
       while (!RFGW_parser::left.tx_messages.empty()) {
@@ -347,11 +348,11 @@ void checkActive() {
     }
   }
 
-  if(RFGW_parser::right.connected){
+  if (RFGW_parser::right.connected) {
     now_active = millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
     if (!now_active) {
       packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device = Communications_protocol::RF_DEFY_RIGHT;
+      packet.header.device  = Communications_protocol::RF_DEFY_RIGHT;
       Communications.callbacks.call(packet.header.command, packet);
       RFGW_parser::right.connected = false;
       while (!RFGW_parser::right.tx_messages.empty()) {
