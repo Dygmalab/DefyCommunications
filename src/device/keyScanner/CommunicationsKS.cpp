@@ -371,12 +371,10 @@ void Communications::init() {
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
-    float driver_brightness     = BatteryManagement::mapRange(p.data[0], 0, 255, 0, 1);
-    float under_glow_brightness = BatteryManagement::mapRange(p.data[1], 0, 255, 0, 0.5);
+    float driver_brightness     = BatteryManagement::mapRange(p.data[0], 0, 255, 0,  LEDManagement::get_max_ledDriver_brightness());
+    float under_glow_brightness = BatteryManagement::mapRange(p.data[1], 0, 255, 0,  LEDManagement::get_max_underglow_brightness());
     DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %f %i %f", p.header.device, p.data[0], driver_brightness, p.data[1], under_glow_brightness);
-    LEDManagement::set_max_ledDriver_brightness(driver_brightness);
     LEDManagement::set_ledDriver_brightness(driver_brightness);
-    LEDManagement::set_max_underglow_brightness(under_glow_brightness);
     LEDManagement::set_underglow_brightness(under_glow_brightness);
     LEDManagement::set_updated(true);
   });
