@@ -14,14 +14,16 @@
 
 constexpr uint8_t SIDE_ID = 25;
 static uint32_t TIMEOUT   = 400;
+constexpr static uint32_t TIMEOUT_DISCONECTION   = 10000;
 queue_t txMessages;
 queue_t rxMessages;
 Communications_protocol::Packet tx_message;
 Communications_protocol::Packet rx_message;
 Communications_protocol::Devices device;
-Communications_protocol::Devices connectedTo;
+Communications_protocol::Devices connectedTo=UNKNOWN;
 bool need_polling{false};
 uint32_t last_time_communication;
+uint32_t last_time_disconection;
 uint16_t keep_alive_timeout = 100;
 
 //TODO: Create enum state for connections
@@ -55,6 +57,8 @@ void neuronDisconnection() {
   //Clean queue
   cleanQueues();
   keep_alive_timeout = 150;
+  connectedTo = UNKNOWN;
+  last_time_disconection = to_ms_since_boot(get_absolute_time());
   just_connected     = false;
 }
 
@@ -67,6 +71,8 @@ void rfDisconnection(bool cleanRf = true) {
   if (cleanRf)
     RFGWCommunication::cleanMessages();
   keep_alive_timeout = 150;
+  connectedTo = UNKNOWN;
+  last_time_disconection = to_ms_since_boot(get_absolute_time());
   just_connected     = false;
 }
 
@@ -172,6 +178,13 @@ void connectionStateMachine() {
 void Communications::run() {
   connectionStateMachine();
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+  if(connectedTo == UNKNOWN && ms_since_enter - last_time_disconection > TIMEOUT_DISCONECTION){
+    LEDManagement::turnPowerOff();
+    if (KeyScanner.newKey()){
+      last_time_disconection = ms_since_enter;
+      LEDManagement::turnPowerOn();
+    }
+  }
   if (ms_since_enter - last_time_communication > keep_alive_timeout || need_polling || KeyScanner.newKey()) {
     Packet packet{};
     if (KeyScanner.newKey()) {
