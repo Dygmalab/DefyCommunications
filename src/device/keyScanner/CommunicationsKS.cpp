@@ -340,6 +340,7 @@ void Communications::init() {
   callbacks.bind(SLEEP, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received SLEEP from %i", p.header.device);
     LEDManagement::turnPowerOff();
+    BatteryManagement::goToSleep();
   });
 
   callbacks.bind(WAKE_UP, [](Packet const &p) {
