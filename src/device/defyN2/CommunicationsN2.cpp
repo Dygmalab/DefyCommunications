@@ -3,14 +3,12 @@
 #include "Communications_protocol_rf.h"
 #include "SpiPort.h"
 #include "Time_counter.h"
-#include "Usb_serial.h"
 #include "rfgw_config_app.h"
 #include "rf_gateway.h"
 #include "CRC_wrapper.h"
 #include "Arduino.h"
 
-extern Usb_serial usb_serial;  // It is declared in main.cpp
-
+#define usbd_ready() true
 extern Time_counter time_counter;
 
 constexpr static uint8_t DELIMITER{0b10101010};
