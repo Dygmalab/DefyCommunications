@@ -2,14 +2,12 @@
 #include "Communications.h"
 #include "Communications_protocol_rf.h"
 #include "SpiPort.h"
-#include "Time_counter.h"
 #include "rfgw_config_app.h"
 #include "rf_gateway.h"
 #include "CRC_wrapper.h"
 #include "Arduino.h"
+#include "Adafruit_USBD_Device.h"
 
-#define usbd_ready() true
-extern Time_counter time_counter;
 
 constexpr static uint8_t DELIMITER{0b10101010};
 
@@ -38,7 +36,7 @@ void checkActive();
 class RFGW_parser {
  public:
   static void run() {
-    if (!usbd_ready()) return;
+    if (!TinyUSBDevice.ready()) return;
     rfgw_poll();
     left.run();
     right.run();
@@ -147,7 +145,7 @@ class RFGW_parser {
     uint64_t lastTimeCommunicationSend{0};
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (!usbd_ready()) return;
+      if (!TinyUSBDevice.ready()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
@@ -213,7 +211,7 @@ void Communications::run() {
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
   if (device_to_send == UNKNOWN) {
-    if (usbd_ready()) {
+    if (TinyUSBDevice.ready()) {
 #if COMPILE_SPI0_SUPPORT
       if (spiPort0Device != UNKNOWN)
         spiPort0.sendPacket(packet);
@@ -249,7 +247,7 @@ bool Communications::sendPacket(Packet packet) {
     return true;
   }
 
-  if (usbd_ready()) {
+  if (TinyUSBDevice.ready()) {
 
 #if COMPILE_SPI0_SUPPORT
     if (spiPort0Device == device_to_send)
