@@ -36,7 +36,7 @@ void checkActive();
 class RFGW_parser {
  public:
   static void run() {
-    if (!TinyUSBDevice.ready()) return;
+    if (!TinyUSBDevice.mounted()) return;
     rfgw_poll();
     left.run();
     right.run();
@@ -145,7 +145,7 @@ class RFGW_parser {
     uint64_t lastTimeCommunicationSend{0};
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (!TinyUSBDevice.ready()) return;
+      if (!TinyUSBDevice.mounted()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
@@ -211,7 +211,7 @@ void Communications::run() {
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
   if (device_to_send == UNKNOWN) {
-    if (TinyUSBDevice.ready()) {
+    if (TinyUSBDevice.mounted()) {
 #if COMPILE_SPI0_SUPPORT
       if (spiPort0Device != UNKNOWN)
         spiPort0.sendPacket(packet);
@@ -247,7 +247,7 @@ bool Communications::sendPacket(Packet packet) {
     return true;
   }
 
-  if (TinyUSBDevice.ready()) {
+  if (TinyUSBDevice.mounted()) {
 
 #if COMPILE_SPI0_SUPPORT
     if (spiPort0Device == device_to_send)
