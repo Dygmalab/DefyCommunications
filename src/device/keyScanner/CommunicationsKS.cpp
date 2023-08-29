@@ -180,6 +180,7 @@ void Communications::run() {
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
   if(connectedTo == UNKNOWN && ms_since_enter - last_time_disconection > TIMEOUT_DISCONECTION){
     LEDManagement::turnPowerOff();
+    BatteryManagement::goToSleep();
     if (KeyScanner.newKey()){
       last_time_disconection = ms_since_enter;
       LEDManagement::turnPowerOn();
