@@ -8,33 +8,42 @@
 
 namespace Communications_protocol {
 	enum Commands {
-		CONNECTED
-		DISCONNECTED
-		GET_OPEN_LED
-		GET_SHORT_LED
-		GET_VERSION
-		HAS_KEYS
-		IS_ALIVE
-		IS_DEAD
-		SET_ALIVE_INTERVAL
-		SET_BRIGHTNESS
-		SET_KEYSCAN_INTERVAL
-		SET_LAYER_KEYMAP_COLORS
-		SET_LAYER_UNDERGLOW_COLORS
-		SET_LED
-		SET_LED_BANK
-		SET_MODE_LED
-		SET_PALETTE_COLORS
-		SLEEP
-		WAKE_UP
+        IS_DEAD
+        IS_ALIVE
+        CONNECTED
+        DISCONNECTED
+        SLEEP
+        WAKE_UP
+        VERSION
+        ALIVE_INTERVAL
+        HAS_KEYS
+        KEYSCAN_INTERVAL
+        BRIGHTNESS
+        MODE_LED
+        LED
+        PALETTE_COLORS
+        LAYER_KEYMAP_COLORS
+        LAYER_UNDERGLOW_COLORS
+        GET_OPEN_LED
+        GET_SHORT_LED
+        BATTERY_LEVEL
+        BATTERY_STATUS
+        BATTERY_SAVING
+        RF_ADDRESS
 	}
 
 	enum Devices {
-		KEYSCANNER_DEFY_LEFT
-		KEYSCANNER_DEFY_RIGHT
-		NEURON_DEFY_WIRED
-		NEURON_DEFY_WIRELESS
 		UNKNOWN
+        KEYSCANNER_DEFY_LEFT
+        KEYSCANNER_DEFY_RIGHT
+        RF_DEFY_LEFT
+        RF_DEFY_RIGHT
+        NEURON_DEFY
+        RF_NEURON_DEFY
+        WIRED_NEURON_DEFY
+        BLE_NEURON_2_DEFY
+        BLE_DEFY_LEFT
+        BLE_DEFY_RIGHT
 	}
 
 	class Header {
@@ -42,6 +51,7 @@ namespace Communications_protocol {
 		+device : Devices
         +has_more_packets : bool
         +size : uint8_t
+        +crc : uint8_t
 	}
 
 	class Packet {

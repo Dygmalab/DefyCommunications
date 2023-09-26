@@ -408,7 +408,7 @@ void Communications::init() {
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
-    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
+    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size-1);
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {

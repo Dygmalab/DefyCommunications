@@ -10,7 +10,7 @@ the [Communications_protocol.h](https://github.com/Dygmalab/DefyCommunications/b
 https://github.com/Dygmalab/DefyCommunications/blob/main/src/Communications_protocol.h
 
 <div align="center">
-  <img alt="UML Diagram" src="http://www.plantuml.com/plantuml/svg/fLF1Zjem43rlli8tsgvOhXKtRp90XB4ZEq3fghAymOMq9459wA7L_dljs0ifMlPINpBpPkRD-7ao6Y3s_4DdROC6eo0eLQ6Reyeq2gkYE9LvfjgyAXjvhAksoge3-XFSwV9KT75LRXiBt8MCKWXJY8mTnQBlJY6LB04goTaLCyRJdhy2Bc96ZJV3GivX8umP2ub9l09dHe1jjZ3P7IfZcW9VOUB1HnvFPoa58JnWMK9Ch_C8tW2tmGLEPCW8u-AVo996mAU4hQ-245qi-OZftBiB5a4lcc02QGgzOWAGcEyQpq4kZVKIUFqY_IlFj9FF3qlD015CDePmahu1TtSqE8KbPzHXwvXttQynugHOqZbbQ-hwPWVLD6YcrLRNNT_xp3qY6f-VqwBRRZG3-Xa3vC_zNZMog6ejpOhyr6PdnkYvgWwNX2R_RGjFUTb-bcs_RT9LkBPxDyBOpzBrLAsw5A8djC1VPCen5HDpVH5_1JIqvDNt3wxeupVBRlZj6GrGNEvrdRUgD9FN-k3MTfyVtLwx7BpRrNhNXTx8kR7n3rwmJyFXhP_YuQpUVx6yodsRn8lu7ecNzFNy1G00">
+  <img alt="UML Diagram" src="http://www.plantuml.com/plantuml/svg/fPHDivem58RN-Ykoi-qThpDTTTn5E6f6J9WaOcsda-5YghG23c0NlTF_NW88UD5kcXNdEPzvGp8P8VRoGmTvXaQJuJ3s8vsT_K0ZAucYInm6VXucSQREQP8dGN92hyE1ZYzHwVVZVLO0L2yYb0tOxjhO8Huqm6AKWYMX3R69w4FX0BYDjSKhK9lMze0BmcXZboqKeHAuXvq6Bx5GAzY91XZ3mhGVEUDaiPGKH1kxPZOefpDIzzl53aW9oc8EussEWtV0JSirTk_xDjG6ld3Ozgrx0L8n5-XDImF5ad5vGsUuQCrt1VF0wL4XiTo8FiOUeOi6yxd2jitDXWT_XlLvslfN66Xpd8F1XgueszAtqj5Y3pRCJVEvVEWirUpswgTSuMqeXGrdjFHq8-_XBU5Wt_NC7BZoZtrFVvI6LhEKUWGdFylGKljxdPPwF0NLpuwcpMzlwBwKh82rTatHfwEVgIX9jIgkqazTtAqfUacIKnkGXRzDuYMCyqygRtcG1XtScSOj2rNJ7Al9flM8vIX-xhU9w2jQuyzASap5l3WNGRu06fkUoVTtLTBxRwPwKT-ioGYH-AZJCFVZOaEfFbMt_XYUgsUXYi67GweFfUjEp8C7uxdMySDu_EXDUMv4_QygrrDuNAGMyLz5Qaclwoy0">
 </div>
 
 ### Packet
@@ -25,10 +25,11 @@ struct Header {
     uint8_t size : 7;
     bool has_more_packets : 1;
   };
+  uint8_t crc;
 };
-static_assert(sizeof(Header) == (sizeof(uint8_t) * 3));
+static_assert(sizeof(Header) == (sizeof(uint8_t) * 4));
 
-static const constexpr uint8_t MAX_TRANSFER_SIZE = 128;
+static const constexpr uint8_t MAX_TRANSFER_SIZE = 32;
 
 union Packet {
   struct {
@@ -40,7 +41,7 @@ union Packet {
 static_assert(sizeof(Packet) == MAX_TRANSFER_SIZE);
 ```
 
-A Packet is a buffer of max side 128Bytes composed of a header and the data.
+A Packet is a buffer of max side 32Bytes composed of a header and the data.
 
 #### Header
 
@@ -51,19 +52,19 @@ Composed by:
 3. Size the number of bytes of the [data](#data)
 4. Boolean that indicates if the neuron has more packets to send, this way the keyscanner can pool him until there is no
    more messages in the queue.
+5. CRC verification of the data
 
 #### Data
 
-Data is a buffer of max side 128 - the side of the header.
+Data is a buffer of max side 32 - the side of the header.
 This will contain the actual message of to send, of example is the command is **HAS_KEYS**, the field size of the header
 will be 5 and in the data buffer data[0..4] will be fill with the KeyMatrix data.
 
 ### Devices
 
-Devices is the enum that declares which device is sending the packet.
-For example in the case of the RF all the communication will go trough only one SPI line, with the device the neuron
-will
-be able to check if the received packet if from the left side or right side, also the same is applied to the KeyScanner
+Devices the enum that declares which device is sending the packet.
+For example, in the case of the RF all the communication will go through only one SPI line, with the device the neuron
+will be able to check if the received packet if from the left side or right side, also the same is applied to the KeyScanner
 this way it will know if the communication is with a Defy Wired o Wireless.
 
 ```cpp
@@ -71,9 +72,16 @@ enum Devices : uint8_t {
   UNKNOWN = 0,
   KEYSCANNER_DEFY_LEFT,
   KEYSCANNER_DEFY_RIGHT,
-  NEURON_DEFY_WIRED,
-  NEURON_DEFY_WIRELESS,
+  RF_DEFY_LEFT,
+  RF_DEFY_RIGHT,
+  NEURON_DEFY,
+  RF_NEURON_DEFY,
+  WIRED_NEURON_DEFY,
+  BLE_NEURON_2_DEFY,
+  BLE_DEFY_LEFT,
+  BLE_DEFY_RIGHT,
 };
+
 ```
 
 ### Commands
@@ -87,27 +95,32 @@ And the rest of the commands are almost self explanatory. But will be explain in
 
 ```cpp
 enum Commands : uint8_t {
-IS_DEAD = 0,
-IS_ALIVE,
-CONNECTED,
-DISCONNECTED,
-SLEEP,
-WAKE_UP,
-GET_VERSION,
-SET_ALIVE_INTERVAL,
-//Keys
-HAS_KEYS = 10,
-SET_KEYSCAN_INTERVAL,
-//LEDS
-SET_BRIGHTNESS = 20,
-SET_MODE_LED,
-SET_LED,
-SET_LED_BANK,
-SET_PALETTE_COLORS,
-SET_LAYER_KEYMAP_COLORS,
-SET_LAYER_UNDERGLOW_COLORS,
-GET_OPEN_LED,
-GET_SHORT_LED,
+  IS_DEAD = 0,
+  IS_ALIVE,
+  CONNECTED,
+  DISCONNECTED,
+  SLEEP,
+  WAKE_UP,
+  VERSION,
+  ALIVE_INTERVAL,
+  //Keys
+  HAS_KEYS = 10,
+  KEYSCAN_INTERVAL,
+  //LEDS
+  BRIGHTNESS = 20,
+  MODE_LED,
+  LED,
+  PALETTE_COLORS,
+  LAYER_KEYMAP_COLORS,
+  LAYER_UNDERGLOW_COLORS,
+  GET_OPEN_LED,
+  GET_SHORT_LED,
+  //Battery
+  BATTERY_LEVEL = 40,
+  BATTERY_STATUS,
+  BATTERY_SAVING,
+  //Config
+  RF_ADDRESS = 50,
 };
 ```
 
@@ -158,15 +171,15 @@ API endpoint to indicate to the keyscanner that can needs to wake_up in a normal
 
 **Data size**: 0 BYTES
 
-#### GET_VERSION
+#### VERSION
 
 **Description**: API endpoint that returns the actual version of the keyscanner.
 
-**Status**:**TBD**
+**Status**: WORKING
 
 **Size**: 4 BYTES
 
-#### SET_ALIVE_INTERVAL
+#### ALIVE_INTERVAL
 
 API endpoint to configure the amount of time between IS_ALIVE commands.
 
@@ -182,7 +195,7 @@ API endpoint to send the state of the key matrix with the actual key presses.
 
 **Size**: 5 BYTES
 
-#### SET_KEYSCAN_INTERVAL
+#### KEYSCAN_INTERVAL
 
 API endpoint to configure the debouncing time.
 
@@ -190,7 +203,7 @@ API endpoint to configure the debouncing time.
 
 **Size**: 1 BYTE
 
-#### SET_BRIGHTNESS
+#### BRIGHTNESS
 
 API endpoint to configure the relative max brightness time.
 
@@ -198,7 +211,7 @@ API endpoint to configure the relative max brightness time.
 
 **Size**: 1 BYTE
 
-#### SET_MODE_LED
+#### MODE_LED
 
 API endpoint to configure the actual led mode.
 
@@ -206,7 +219,7 @@ API endpoint to configure the actual led mode.
 
 **Size**: Different for each led mode BYTE
 
-#### SET_LED
+#### LED
 
 API endpoint to configure the color of a single key.
 
@@ -214,7 +227,7 @@ API endpoint to configure the color of a single key.
 
 **Size**: 3 BYTES [ROW,COL,PALLET]
 
-#### SET_LED_BANK
+#### LED_BANK
 
 API endpoint to configure the color of a bank of LEDS.
 
@@ -224,31 +237,36 @@ API endpoint to configure the color of a bank of LEDS.
 
 SET_PALETTE_COLORS
 
-#### SET_PALETTE_COLORS
+#### PALETTE_COLORS
 
 API endpoint to configure the palette colors.
 
 **Status**: WORKING
 
-**Size**: 16(MAX PALETTE COLORS)*4(RGBW) = 64 BYTES
+**Structure**: [Starting Index][Data]
 
-#### SET_LAYER_KEYMAP_COLORS
+**Size**: 16 colors*4(bytes of RGBW) splited in messages of 27 bytes
+
+#### LAYER_KEYMAP_COLORS
 
 API endpoint to configure the layer colors with palette of just the keymap.
 
 **Status**: WORKING
 
-**Size**: 1(Layer Index) + 35(KeyMap) = 36 BYTES
+**Structure**: [Layer][Data]
 
-#### SET_LAYER_UNDERGLOW_COLORS
+**Size**: 35 keys merged in 27 bytes as one color is repressed only by 4bits, then 35/2 is 18.
+
+#### LAYER_UNDERGLOW_COLORS
 
 API endpoint to configure the layer colors with palette of just the underglow.
 
-**Status**: WORKING
+**Structure**: [Layer][Data]
 
-**Size**: 1(Layer Index) + 53(KeyMap) = 36 BYTES
+**Size**: 53 keys merged in 18 bytes as one color is repressed only by 4bits, then 53/2 is 28.
 
-#### GET_OPEN_LED
+
+#### OPEN_LED
 
 API endpoint to get the open leds status.
 
@@ -256,13 +274,45 @@ API endpoint to get the open leds status.
 
 **Size**: 33 BYTES
 
-#### GET_SHORT_LED
+#### SHORT_LED
 
 API endpoint to get the short leds status.
 
-**Status**: WORKING
+**Status**: NOT WORKING (Overflow of data)
 
 **Size**: 33 BYTE
+
+#### SHORT_LED
+
+API endpoint to get the short leds status.
+
+**Status**: NOT WORKING (Overflow of data)
+
+**Size**: 33 BYTE
+
+#### BATTERY_LEVEL
+
+API endpoint to get/send battery level in %
+
+**Status**: WORKING
+
+**Size**: 1 BYTE
+
+#### BATTERY_STATUS
+
+API endpoint to get/send battery status in %
+
+**Status**: WORKING
+
+**Size**: 1 BYTE
+
+#### RF_ADDRESS
+
+API endpoint to set the RF ADDRESS used to unique message sending between defys.
+
+**Status**: WORKING
+
+**Size**: 4 BYTE
 
 ## Library
 
@@ -353,6 +403,15 @@ int main() {
 }
 ```
 
+#### Output
+
+```bash
+Update of the speed of the motor now at 60
+Update of the rotation of the right wheel now at 90
+Update of the rotation of the left wheel now at 90
+Update of the force at the brake now at 10
+```
+
 Keyscanner code using bindingCallbacks
 
 ```cpp
@@ -376,13 +435,3 @@ callbacks.bind(SET_MODE_LED, [](Packet p) {
 LEDManagement::set_led_mode(p.data);
 });
 ```
-
-#### Output
-
-```bash
-Update of the speed of the motor now at 60
-Update of the rotation of the right wheel now at 90
-Update of the rotation of the left wheel now at 90
-Update of the force at the brake now at 10
-```
-
