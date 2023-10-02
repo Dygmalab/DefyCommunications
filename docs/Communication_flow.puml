@@ -1,0 +1,55 @@
+@startuml
+participant Keyscanner << (K,#CCD0B2) >>
+participant Neuron << N,#ADD1B2) >>
+
+note right of Keyscanner : Notify alive
+Keyscanner -> Neuron : IS ALIVE
+Neuron -> Keyscanner : IS ALIVE
+Keyscanner -> Neuron : CONNECTED
+Neuron -> Keyscanner : CONNECTED
+note right of Keyscanner : Connection established
+note right of Keyscanner : Keyscanner requests configuration from Neuron
+
+Keyscanner -> Neuron : BRIGHTNESS
+Keyscanner -> Neuron : BATTERY_STATUS
+Keyscanner -> Neuron : BATTERY_LEVEL
+Keyscanner -> Neuron : BATTERY_SAVING
+Keyscanner -> Neuron : PALETTE
+Keyscanner -> Neuron : FIRST_LAYER_KEYMAP_COLOR
+Keyscanner -> Neuron : FIRST_LAYER_UNDERGLOW_CONNECTION
+Keyscanner -> Neuron : LED_MODE
+Keyscanner -> Neuron : NEXT_LAYER
+Keyscanner -> Neuron : NEXT_UNDERGLOW
+note left of Neuron : Neuron responds with configuration data
+Neuron -> Keyscanner : BRIGHTNESS
+Neuron -> Keyscanner : BATTERY_STATUS
+Neuron -> Keyscanner : BATTERY_LEVEL
+Neuron -> Keyscanner : BATTERY_SAVING
+Neuron -> Keyscanner : PALETTE
+Neuron -> Keyscanner : FIRST_LAYER_KEYMAP_COLOR
+Neuron -> Keyscanner : FIRST_LAYER_UNDERGLOW_CONNECTION
+Neuron -> Keyscanner : LED_MODE
+Neuron -> Keyscanner : NEXT_LAYER 2
+Neuron -> Keyscanner : NEXT_UNDERGLOW 2
+Neuron -> Keyscanner : NEXT_LAYER 3
+Neuron -> Keyscanner : NEXT_UNDERGLOW 3
+Neuron -> Keyscanner : NEXT_LAYER 4
+Neuron -> Keyscanner : NEXT_UNDERGLOW 4
+Neuron -> Keyscanner : NEXT_LAYER 5
+Neuron -> Keyscanner : NEXT_UNDERGLOW 5
+Neuron -> Keyscanner : NEXT_LAYER 6
+Neuron -> Keyscanner : NEXT_UNDERGLOW 6
+Neuron -> Keyscanner : NEXT_LAYER 7
+Neuron -> Keyscanner : NEXT_UNDERGLOW 7
+Neuron -> Keyscanner : NEXT_LAYER 8
+Neuron -> Keyscanner : NEXT_UNDERGLOW 8
+Neuron -> Keyscanner : NEXT_LAYER 9
+Neuron -> Keyscanner : NEXT_UNDERGLOW 9
+Neuron -> Keyscanner : NEXT_LAYER 10
+Neuron -> Keyscanner : NEXT_UNDERGLOW 10
+note right of Keyscanner : Sending key change layer
+Keyscanner -> Neuron : HAS_KEY
+Neuron -> Keyscanner : LED_MODE
+Keyscanner -> Neuron : HAS_KEY
+Neuron -> Keyscanner : LED_MODE
+@enduml
