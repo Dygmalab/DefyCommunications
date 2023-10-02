@@ -452,4 +452,6 @@ The comunnications flow is based on callbacks to handle incoming requests and re
 - BLE: Uses the RFGW layer acting the left side as a host instead of a device and forwards the messages via SPI, the messages of the left goes via SPI.
 
 This is how the normal communication will work.
+
+
 ![Example communications](http://www.plantuml.com/plantuml/svg/fPHTJuCm58Rl-HLDlD54apc_ZLdIGPrah2o0qrsHoihMECiidMR_NXJSq5WuYNU5yvod9tdRhfZI8X4h9ZKQyasUC2cvGZStQ7zuk6VRJgVVFK2zdhMgWPIlLIO_8NguXntdk68icMcEb9WlDChIkkyQqKoBT8FOKhnngrOvwdthhf4R8kov4s9LVuhQ3yUsRkYtVKg97H779DW13PFQMR58j2ZwUQxPqrBa2pvhwgXzAFwwBhfob6Go5VErOb-YL6KlrPoMQVf-u0xk8ah2q4ZWA2B1D0uZ7DstKXwP4AzLXISk7PYeCVP8mPdAjsuGHh67foI8XsGwmkFOzZq_WF3tr271mFCVuYeKrwUcFeyuySXtZ7DGybXf6udjbcMMIvv-HRc3oeNY-IgJinoz2xtubUECQMOwNBNyJCJF_5geChysLPcVWVhEpr0svWVW_ypFqBVDpr3VvOUwZSnsqnQkT9q0NIS0rodGTGfmdG5TPm3NET1r3d1T05qN0DSbq7K9S5q1NLS0rt47A2l0XXS_v78cv1mzymrA5apEY-U4RRWolJztEFoyOQqNv7_j7m00)
