@@ -180,6 +180,7 @@ void Communications::run() {
   uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
   if(connectedTo == UNKNOWN && ms_since_enter - last_time_disconection > TIMEOUT_DISCONECTION){
     LEDManagement::turnPowerOff();
+    BatteryManagement::goToSleep();
     if (KeyScanner.newKey()){
       last_time_disconection = ms_since_enter;
       LEDManagement::turnPowerOn();
@@ -407,7 +408,7 @@ void Communications::init() {
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
-    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size);
+    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size-1);
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
