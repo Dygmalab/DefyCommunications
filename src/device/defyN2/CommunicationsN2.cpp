@@ -9,32 +9,53 @@
 #include "Adafruit_USBD_Device.h"
 
 
-constexpr static uint8_t DELIMITER{0b10101010};
-
-#if COMPILE_SPI0_SUPPORT
-static SpiPort spiPort0(0);
-Devices spiPort0Device{Communications_protocol::UNKNOWN};
-static uint32_t spiPort0LastCommunication{0};
-#endif
-
-#if COMPILE_SPI1_SUPPORT
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort1LastCommunication{0};
-#endif
 
-#if COMPILE_SPI2_SUPPORT
 static SpiPort spiPort2(2);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
-#endif
-
-static uint32_t TIMEOUT = 1300;
+static uint32_t TIMEOUT = 500;
 
 void checkActive();
 
-class RFGW_parser {
+class RFGWCommunications {
  public:
+  static void cbPipeDisconnection(rfgw_pipe_id_t pipeId) {
+    NRF_LOG_DEBUG("Disconnected RF %lu", pipeId);
+    RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
+    side.connected                 = false;
+    Packet packet{};
+    packet.header.command = Communications_protocol::DISCONNECTED;
+    packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT: RF_DEFY_LEFT;
+    Communications.callbacks.call(packet.header.command, packet);
+
+    while (!side.tx_messages.empty()) {
+      side.tx_messages.pop();
+    }
+  };
+
+  static void cbPipeConnection(rfgw_pipe_id_t pipeId) {
+    RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
+    side.connected                 = true;
+    NRF_LOG_DEBUG("Connected RF %lu", pipeId);
+  };
+
+  static void init() {
+    rfgw_cb_pipe_disconnection_set(cbPipeDisconnection);
+    rfgw_cb_pipe_connection_set(cbPipeConnection);
+
+    Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
+      if (p.header.device == RF_DEFY_LEFT || p.header.device == RF_DEFY_RIGHT) {
+        p.header.size    = 0;
+        p.header.device  = p.header.device;
+        p.header.command = IS_ALIVE;
+        Communications.sendPacket(p);
+      }
+    });
+  }
+
   static void run() {
     if (!TinyUSBDevice.mounted()) return;
     rfgw_poll();
@@ -58,9 +79,6 @@ class RFGW_parser {
 
     void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
       if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
-        connected = true;
-        NRF_LOG_DEBUG("Got packet took %i %i %i %i", millis() - lastTimeCommunication, p_parse->wrapperPacket.packet.header.device, p_parse->pkt_cmd, pipe_id);
-        lastTimeCommunication = millis();
         Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
         /* Discard the already processed packet */
         buffer_update_read_pos(p_buffer, p_parse->pkt_size);
@@ -121,28 +139,18 @@ class RFGW_parser {
       rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
       parseProcess();
 
-      if (tx_messages.empty() && millis() - lastTimeCommunicationSend > 150 && connected) {
-        Packet packet{};
-        packet.header.command = Communications_protocol::IS_ALIVE;
-        sendPacket(packet);
-      }
-
       if (!tx_messages.empty()) {
         Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
         uint16_t size_to_transfer                         = packet.getSize();
         if (pipe_send_loadsize >= size_to_transfer) {
-          //          NRF_LOG_DEBUG("Sending packet took %i %i %i %i",millis() - lastTimeCommunicationSend,packet.packet.header.device,packet.packet.header.command,pipe_id);
           rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
           tx_messages.pop();
-          lastTimeCommunicationSend = millis();
         }
       }
     }
 
     bool connected = false;
     rfgw_pipe_id_t pipe_id;
-    uint64_t lastTimeCommunication{0};
-    uint64_t lastTimeCommunicationSend{0};
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
       if (!TinyUSBDevice.mounted()) return;
@@ -156,78 +164,95 @@ class RFGW_parser {
   static Side right;
 };
 
-RFGW_parser::Side RFGW_parser::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
-RFGW_parser::Side RFGW_parser::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
+RFGWCommunications::Side RFGWCommunications::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
+RFGWCommunications::Side RFGWCommunications::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
 
+
+class WiredCommunications {
+ public:
+  static void init() {
+    spiPort1.init();
+    spiPort2.init();
+  }
+
+  static void readPacket(uint8_t port) {
+    SpiPort &spiPort             = port == 1 ? spiPort1 : spiPort2;
+    Devices &device              = port == 1 ? spiPort1Device : spiPort2Device;
+    uint32_t &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
+    Packet packet{};
+    if (spiPort.readPacket(packet)) {
+      lastCommunications = millis();
+      device             = packet.header.device;
+      Communications.callbacks.call(packet.header.command, packet);
+    }
+  }
+
+  static void checkActive(uint8_t port) {
+    SpiPort &spiPort             = port == 1 ? spiPort1 : spiPort2;
+    Devices &device              = port == 1 ? spiPort1Device : spiPort2Device;
+    uint32_t const &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
+
+    bool now_active;
+    Packet packet;
+
+    if (device != UNKNOWN) {
+      now_active = millis() - lastCommunications <= TIMEOUT;
+      if (!now_active) {
+        packet.header.command = Communications_protocol::DISCONNECTED;
+        packet.header.device  = device;
+        Communications.callbacks.call(packet.header.command, packet);
+        device = UNKNOWN;
+        //Remove all the left packets at disconnections
+        spiPort.clearRead();
+        spiPort.clearSend();
+      }
+    }
+  }
+
+  static void run() {
+    readPacket(1);
+    checkActive(1);
+
+    readPacket(2);
+    checkActive(2);
+  }
+};
 
 void Communications::init() {
-#if COMPILE_SPI0_SUPPORT
-  spiPort0.init();
-#endif
-
-#if COMPILE_SPI1_SUPPORT
-  spiPort1.init();
-#endif
-
-#if COMPILE_SPI2_SUPPORT
-  spiPort2.init();
-#endif
-
   callbacks.bind(CONNECTED, [this](Packet p) {
     p.header.size    = 0;
     p.header.device  = p.header.device;
     p.header.command = CONNECTED;
+    NRF_LOG_INFO("Get connected from %i", p.header.device);
     sendPacket(p);
   });
+
+
+  WiredCommunications::init();
+
+
+  RFGWCommunications::init();
 }
 
 void Communications::run() {
-  Packet packet{};
-#if COMPILE_SPI0_SUPPORT
-  if (spiPort0.readPacket(packet)) {
-    spiPort0LastCommunication = millis();
-    spiPort0Device            = packet.header.device;
-    callbacks.call(packet.header.command, packet);
-  }
-#endif
-#if COMPILE_SPI2_SUPPORT
-  if (spiPort1.readPacket(packet)) {
-    spiPort1Device            = packet.header.device;
-    spiPort1LastCommunication = millis();
-    callbacks.call(packet.header.command, packet);
-  }
-#endif
-#if COMPILE_SPI2_SUPPORT
-  if (spiPort2.readPacket(packet)) {
-    spiPort2LastCommunication = millis();
-    spiPort2Device            = packet.header.device;
-    callbacks.call(packet.header.command, packet);
-  }
-#endif
-  RFGW_parser::run();
-  checkActive();
+  WiredCommunications::run();
+
+  RFGWCommunications::run();
+
 }
 
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
   if (device_to_send == UNKNOWN) {
     if (TinyUSBDevice.mounted()) {
-#if COMPILE_SPI0_SUPPORT
-      if (spiPort0Device != UNKNOWN)
-        spiPort0.sendPacket(packet);
-#endif
-#if COMPILE_SPI1_SUPPORT
       if (spiPort1Device != UNKNOWN) {
         packet.header.device = Communications_protocol::NEURON_DEFY;
         spiPort1.sendPacket(packet);
       }
-#endif
-#if COMPILE_SPI2_SUPPORT
       if (spiPort2Device != UNKNOWN) {
         packet.header.device = Communications_protocol::NEURON_DEFY;
         spiPort2.sendPacket(packet);
       }
-#endif
     } else {
       if (spiPort2Device != UNKNOWN) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
@@ -240,31 +265,23 @@ bool Communications::sendPacket(Packet packet) {
     }
 
 
-    if (RFGW_parser::right.connected)
-      RFGW_parser::right.sendPacket(packet);
-    if (RFGW_parser::left.connected)
-      RFGW_parser::left.sendPacket(packet);
+    if (RFGWCommunications::right.connected)
+      RFGWCommunications::right.sendPacket(packet);
+    if (RFGWCommunications::left.connected)
+      RFGWCommunications::left.sendPacket(packet);
     return true;
   }
 
   if (TinyUSBDevice.mounted()) {
 
-#if COMPILE_SPI0_SUPPORT
-    if (spiPort0Device == device_to_send)
-      spiPort0.sendPacket(packet);
-#endif
-#if COMPILE_SPI1_SUPPORT
     if (spiPort1Device == device_to_send) {
       packet.header.device = Communications_protocol::NEURON_DEFY;
       spiPort1.sendPacket(packet);
     }
-#endif
-#if COMPILE_SPI2_SUPPORT
     if (spiPort2Device == device_to_send) {
       packet.header.device = Communications_protocol::NEURON_DEFY;
       spiPort2.sendPacket(packet);
     }
-#endif
   } else {
     //This could even been improved by checking if the spi port1 is connected and only sending the message to spiport2
     if (spiPort2Device != UNKNOWN) {
@@ -280,82 +297,14 @@ bool Communications::sendPacket(Packet packet) {
     return true;
   }
 
-  if (RFGW_parser::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
-    RFGW_parser::left.sendPacket(packet);
+  if (RFGWCommunications::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
+    RFGWCommunications::left.sendPacket(packet);
 
 
-  if (RFGW_parser::right.connected && device_to_send == Communications_protocol::RF_DEFY_RIGHT)
-    RFGW_parser::right.sendPacket(packet);
+  if (RFGWCommunications::right.connected && device_to_send == Communications_protocol::RF_DEFY_RIGHT)
+    RFGWCommunications::right.sendPacket(packet);
 
   return true;
-}
-
-void checkActive() {
-  bool now_active;
-  Packet packet;
-
-#if COMPILE_SPI0_SUPPORT
-  if (spiPort0Device != UNKNOWN) {
-    now_active = millis() - spiPort0LastCommunication <= timeout;
-    if (!now_active) {
-      spiPort0Device = UNKNOWN;
-      while (spiPort0.readPacket(packet)) {}
-    }
-  }
-#endif
-
-#if COMPILE_SPI1_SUPPORT
-  if (spiPort1Device != UNKNOWN) {
-    now_active = millis() - spiPort1LastCommunication <= TIMEOUT;
-    if (!now_active) {
-      packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device  = spiPort1Device;
-      Communications.callbacks.call(packet.header.command, packet);
-      spiPort1Device = UNKNOWN;
-      //Remove all the left packets at disconnections
-      while (spiPort1.readPacket(packet)) {}
-    }
-  }
-#endif
-
-#if COMPILE_SPI2_SUPPORT
-  if (spiPort2Device != UNKNOWN) {
-    now_active = millis() - spiPort2LastCommunication <= TIMEOUT;
-    if (!now_active) {
-      packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device  = spiPort1Device;
-      Communications.callbacks.call(packet.header.command, packet);
-      spiPort2Device = UNKNOWN;
-      //Remove all the left packets at disconnections
-      while (spiPort2.readPacket(packet)) {}
-    }
-  }
-#endif
-  if (RFGW_parser::left.connected) {
-    now_active = millis() - RFGW_parser::left.lastTimeCommunication <= TIMEOUT;
-    if (!now_active) {
-      packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device  = Communications_protocol::RF_DEFY_LEFT;
-      Communications.callbacks.call(packet.header.command, packet);
-      RFGW_parser::left.connected = false;
-      while (!RFGW_parser::left.tx_messages.empty()) {
-        RFGW_parser::left.tx_messages.pop();
-      }
-    }
-  }
-
-  if (RFGW_parser::right.connected) {
-    now_active = millis() - RFGW_parser::right.lastTimeCommunication <= TIMEOUT;
-    if (!now_active) {
-      packet.header.command = Communications_protocol::DISCONNECTED;
-      packet.header.device  = Communications_protocol::RF_DEFY_RIGHT;
-      Communications.callbacks.call(packet.header.command, packet);
-      RFGW_parser::right.connected = false;
-      while (!RFGW_parser::right.tx_messages.empty()) {
-        RFGW_parser::right.tx_messages.pop();
-      }
-    }
-  }
 }
 
 
