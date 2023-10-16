@@ -259,7 +259,7 @@ bool Communications::sendPacket(Packet packet) {
         spiPort2.sendPacket(packet);
       }
       if (spiPort1Device != UNKNOWN) {
-        packet.header.device = Communications_protocol::NEURON_DEFY;
+        packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort1.sendPacket(packet);
       }
     }
@@ -285,12 +285,12 @@ bool Communications::sendPacket(Packet packet) {
   } else {
     //This could even been improved by checking if the spi port1 is connected and only sending the message to spiport2
     if (spiPort2Device != UNKNOWN) {
-      packet.header.device = device_to_send;
+      packet.header.device = BLE_NEURON_2_DEFY;
       spiPort2.sendPacket(packet);
     }
 
-    if (spiPort1Device == device_to_send) {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
+    if (spiPort1Device != UNKNOWN) {
+      packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
       spiPort1.sendPacket(packet);
     }
     //No need to continue RF is disabled in ble mode
