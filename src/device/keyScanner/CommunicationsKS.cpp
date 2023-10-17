@@ -47,7 +47,7 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
-      if(!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished){
+      if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
         LEDManagement::set_mode_disconnected();
       }
     });
@@ -154,6 +154,25 @@ class WiredCommunication {
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
+  if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
+    const constexpr uint32_t timeout_no_connection = 10000;
+    static uint32_t lastTimeKeyPress               = 0;
+    static uint32_t sleeping               = false;
+    if (KeyScanner.newKey()) {
+      KeyScanner.keyState(false);
+      lastTimeKeyPress = to_ms_since_boot(get_absolute_time());
+      if(sleeping){
+        LEDManagement::turnPowerOn();
+        sleeping = false;
+      }
+    }
+    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+    if (!sleeping && (ms_since_enter - lastTimeKeyPress >= timeout_no_connection)) {
+      BatteryManagement::goToSleep();
+      LEDManagement::turnPowerOff();
+      sleeping = true;
+    }
+  }
 }
 
 
