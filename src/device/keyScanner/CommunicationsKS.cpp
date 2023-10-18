@@ -39,8 +39,14 @@ class WiredCommunication {
       if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         p.header.device  = device;
-        p.header.command = Communications_protocol::CONNECTED;
+        //This way only send one connected
+        if(timesEnter>0){
+          p.header.command = Communications_protocol::IS_ALIVE;
+        }else{
+          p.header.command = Communications_protocol::CONNECTED;
+        }
         p.header.size    = 0;
+        timesEnter++;
         DBG_PRINTF_TRACE("Wired Neuron is available to connect");
         WiredCommunication::sendPacket(p);
       }
@@ -56,10 +62,11 @@ class WiredCommunication {
       if (!WiredCommunication::connected) return;
       if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
-        DBG_PRINTF_TRACE("Neuron wired connected");
+        DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
         WiredCommunication::bleConnection         = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
         if (RFGWCommunication::isEnabled() || bleConnection) {
+          DBG_PRINTF_TRACE("Ble Connection");
           RFGWCommunication::communicationType = bleConnection ? RFGWCommunication::CommunicationType::BLE : RFGWCommunication::CommunicationType::WIRED;
           //This will take care of enable the RF for ble or disable ir completely
           RFGateway::rf_disable();
@@ -85,6 +92,7 @@ class WiredCommunication {
       SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
       if (response.header.command != IS_DEAD && verifyCrc(response)) {
         connected = true;
+        timesEnter = 0;
         Communications.callbacks.call(response.header.command, response);
       }
     }
@@ -133,9 +141,15 @@ class WiredCommunication {
 
     if (verifyCrc(response)) {
       if (bleConnection) {
-        RFGWCommunication::sendPacket(response);
-        //Only if its a message for the BLE then forwarded it and not showed it to the current device
-        if (response.header.device == Communications_protocol::BLE_DEFY_LEFT || response.header.device == Communications_protocol::BLE_DEFY_RIGHT) return true;
+        if(response.header.device == Communications_protocol::BLE_DEFY_LEFT || response.header.device == Communications_protocol::BLE_DEFY_RIGHT){
+          DBG_PRINTF_TRACE("Forwading packet");
+          RFGWCommunication::sendPacket(response);
+          return true;
+        }
+        if(response.header.device == UNKNOWN){
+          DBG_PRINTF_TRACE("Forwading packet");
+          RFGWCommunication::sendPacket(response);
+        }
       }
       Communications.callbacks.call(response.header.command, response);
       return true;
@@ -144,6 +158,7 @@ class WiredCommunication {
     return false;
   }
 
+  inline static uint8_t timesEnter = 0;
   inline static auto connected                   = false;
   inline static auto connectionEstablished       = false;
   inline static bool keepPooling                 = false;
