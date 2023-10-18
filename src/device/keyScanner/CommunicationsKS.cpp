@@ -37,23 +37,33 @@ class WiredCommunication {
     Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
       if (!WiredCommunication::connected) return;
       if (WiredCommunication::connectionEstablished) return;
-      if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::NEURON_DEFY) {
+      if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         p.header.device  = device;
         p.header.command = Communications_protocol::CONNECTED;
         p.header.size    = 0;
-        WiredCommunication::sendPacket(p);
         DBG_PRINTF_TRACE("Wired Neuron is available to connect");
+        WiredCommunication::sendPacket(p);
+      }
+    });
+
+    Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
+      if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
+        LEDManagement::set_mode_disconnected();
       }
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
       if (!WiredCommunication::connected) return;
       if (WiredCommunication::connectionEstablished) return;
-      if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY) {
+      if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected");
         WiredCommunication::connectionEstablished = true;
-        if (RFGWCommunication::isEnabled())
+        WiredCommunication::bleConnection         = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
+        if (RFGWCommunication::isEnabled() || bleConnection) {
+          RFGWCommunication::communicationType = bleConnection ? RFGWCommunication::CommunicationType::BLE : RFGWCommunication::CommunicationType::WIRED;
+          //This will take care of enable the RF for ble or disable ir completely
           RFGateway::rf_disable();
+        }
       }
     });
   }
@@ -97,24 +107,36 @@ class WiredCommunication {
     last_time_communication = to_ms_since_boot(get_absolute_time());
 
     Packet response{};
-    sending.header.device = device;
+    if (!bleConnection || !(sending.header.device == Communications_protocol::BLE_DEFY_RIGHT || sending.header.device == Communications_protocol::BLE_DEFY_LEFT)) {
+      sending.header.device = device;
+    }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
-
+    //DBG_PRINTF_TRACE("Sending to device %i command %i and response of device %i %i", sending.header.device, sending.header.command, response.header.device,response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
+      DBG_PRINTF_TRACE("Wired disconnected");
+      if (!RFGWCommunication::isEnabled() || bleConnection) {
+        RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::WIRED;
+        RFGateway::rf_disable();
+      }
       connected             = false;
       connectionEstablished = false;
-      DBG_PRINTF_TRACE("Wired disconnected");
-      if (!RFGWCommunication::isEnabled())
-        RFGateway::rf_device_type_set(RFGateway::RFGW_RF_DEV_TYPE_DEVICE);
-      LEDManagement::set_mode_disconnected();
+      bleConnection         = false;
+      Packet p{};
+      p.header.command = DISCONNECTED;
+      Communications.callbacks.call(p.header.command, p);
       return false;
     }
 
     WiredCommunication::keepPooling = response.header.has_more_packets;
 
     if (verifyCrc(response)) {
+      if (bleConnection) {
+        RFGWCommunication::sendPacket(response);
+        //Only if its a message for the BLE then forwarded it and not showed it to the current device
+        if (response.header.device == Communications_protocol::BLE_DEFY_LEFT || response.header.device == Communications_protocol::BLE_DEFY_RIGHT) return true;
+      }
       Communications.callbacks.call(response.header.command, response);
       return true;
     }
@@ -125,12 +147,32 @@ class WiredCommunication {
   inline static auto connected                   = false;
   inline static auto connectionEstablished       = false;
   inline static bool keepPooling                 = false;
+  inline static bool bleConnection               = false;
   inline static uint32_t last_time_communication = 0;
 };
 
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
+  if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
+    const constexpr uint32_t timeout_no_connection = 10000;
+    static uint32_t lastTimeKeyPress               = 0;
+    static uint32_t sleeping               = false;
+    if (KeyScanner.newKey()) {
+      KeyScanner.keyState(false);
+      lastTimeKeyPress = to_ms_since_boot(get_absolute_time());
+      if(sleeping){
+        LEDManagement::turnPowerOn();
+        sleeping = false;
+      }
+    }
+    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+    if (!sleeping && (ms_since_enter - lastTimeKeyPress >= timeout_no_connection)) {
+      BatteryManagement::goToSleep();
+      LEDManagement::turnPowerOff();
+      sleeping = true;
+    }
+  }
 }
 
 
