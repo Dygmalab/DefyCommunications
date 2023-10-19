@@ -17,7 +17,7 @@ static uint32_t spiPort1LastCommunication{0};
 static SpiPort spiPort2(2);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
-static uint32_t TIMEOUT = 500;
+static uint32_t TIMEOUT = 300;
 
 void checkActive();
 
