@@ -54,7 +54,11 @@ class WiredCommunication {
 
     Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
       if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
+        KeyScanner.keyState(true);
         LEDManagement::set_mode_disconnected();
+      }
+      if(WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished){
+        Communications.sendPacket(p);
       }
     });
 
@@ -81,9 +85,9 @@ class WiredCommunication {
 
   static void checkConnection() {
     if (connected) return;
-    const constexpr uint16_t keep_alive_timeout = 500;
+    const constexpr uint16_t keep_alive_timeout_connection = 500;
     uint32_t ms_since_enter                     = to_ms_since_boot(get_absolute_time());
-    if (ms_since_enter - last_time_communication > keep_alive_timeout) {
+    if (ms_since_enter - last_time_communication > keep_alive_timeout_connection) {
       last_time_communication = ms_since_enter;
       Packet sending{};
       sending.header.command = IS_ALIVE;
@@ -100,7 +104,6 @@ class WiredCommunication {
 
   static void pollConnection() {
     if (!connectionEstablished) return;
-    const constexpr uint16_t keep_alive_timeout = 100;
     uint32_t ms_since_enter                     = to_ms_since_boot(get_absolute_time());
     if (keepPooling || ms_since_enter - last_time_communication > keep_alive_timeout) {
       last_time_communication = ms_since_enter;
@@ -120,7 +123,6 @@ class WiredCommunication {
     }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
-    //DBG_PRINTF_TRACE("Sending to device %i command %i and response of device %i %i", sending.header.device, sending.header.command, response.header.device,response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
       DBG_PRINTF_TRACE("Wired disconnected");
@@ -137,7 +139,8 @@ class WiredCommunication {
       return false;
     }
 
-    WiredCommunication::keepPooling = response.header.has_more_packets;
+    WiredCommunication::keepPooling = response.header.has_more_packets && !bleConnection;
+    keep_alive_timeout = response.header.has_more_packets && bleConnection ? 30 : 100;
 
     if (verifyCrc(response)) {
       if (bleConnection) {
@@ -163,6 +166,7 @@ class WiredCommunication {
   inline static auto connectionEstablished       = false;
   inline static bool keepPooling                 = false;
   inline static bool bleConnection               = false;
+  inline static uint16_t keep_alive_timeout = 100;
   inline static uint32_t last_time_communication = 0;
 };
 
