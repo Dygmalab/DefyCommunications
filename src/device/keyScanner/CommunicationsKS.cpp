@@ -35,7 +35,6 @@ class WiredCommunication {
  public:
   static void init() {
     Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
-      if (!WiredCommunication::connected) return;
       if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         p.header.device  = device;
@@ -63,17 +62,18 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
-      if (!WiredCommunication::connected) return;
       if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
-        WiredCommunication::bleConnection         = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
-        if (RFGWCommunication::isEnabled() || bleConnection) {
-          DBG_PRINTF_TRACE("Ble Connection");
-          RFGWCommunication::communicationType = bleConnection ? RFGWCommunication::CommunicationType::BLE : RFGWCommunication::CommunicationType::WIRED;
-          //This will take care of enable the RF for ble or disable ir completely
-          RFGateway::rf_disable();
+        if(p.header.device != Communications_protocol::WIRED_NEURON_DEFY){
+          WiredCommunication::bleConnection         = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
+          if (RFGWCommunication::isEnabled() || bleConnection) {
+            DBG_PRINTF_TRACE("Ble Connection");
+            RFGWCommunication::communicationType = bleConnection ? RFGWCommunication::CommunicationType::BLE : RFGWCommunication::CommunicationType::WIRED;
+            //This will take care of enable the RF for ble or disable ir completely
+            RFGateway::rf_disable();
+          }
         }
       }
     });
@@ -84,7 +84,7 @@ class WiredCommunication {
   }
 
   static void checkConnection() {
-    if (connected) return;
+    if (connectionEstablished) return;
     const constexpr uint16_t keep_alive_timeout_connection = 500;
     uint32_t ms_since_enter                     = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - last_time_communication > keep_alive_timeout_connection) {
@@ -95,8 +95,8 @@ class WiredCommunication {
       Packet response{};
       SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
       if (response.header.command != IS_DEAD && verifyCrc(response)) {
-        connected = true;
         timesEnter = 0;
+        response.header.command = IS_ALIVE;
         Communications.callbacks.call(response.header.command, response);
       }
     }
@@ -123,6 +123,7 @@ class WiredCommunication {
     }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
+    DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command,response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
       DBG_PRINTF_TRACE("Wired disconnected");
@@ -130,7 +131,6 @@ class WiredCommunication {
         RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::WIRED;
         RFGateway::rf_disable();
       }
-      connected             = false;
       connectionEstablished = false;
       bleConnection         = false;
       Packet p{};
@@ -162,7 +162,6 @@ class WiredCommunication {
   }
 
   inline static uint8_t timesEnter = 0;
-  inline static auto connected                   = false;
   inline static auto connectionEstablished       = false;
   inline static bool keepPooling                 = false;
   inline static bool bleConnection               = false;
@@ -347,6 +346,7 @@ void Communications::init() {
 
 
 bool Communications::sendPacket(Packet packet) {
+  DBG_PRINTF_TRACE("Trying to send packet to device %i with command %i", packet.header.device, packet.header.command);
   if (WiredCommunication::connectionEstablished)
     return WiredCommunication::sendPacket(packet);
   if (RFGWCommunication::connectionEstablished)
