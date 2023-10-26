@@ -173,7 +173,7 @@ void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-    const constexpr uint32_t timeout_no_connection = 20000;
+    const constexpr uint32_t timeout_no_connection = 30000;
     static uint32_t lastTimeKeyPress               = 0;
     static uint32_t sleeping               = false;
     if (KeyScanner.newKey()) {
