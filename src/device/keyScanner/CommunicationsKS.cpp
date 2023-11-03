@@ -14,7 +14,7 @@
 
 constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
-
+using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
 
 
@@ -176,6 +176,9 @@ void goToSleep(){
     RFGateway::run();
   }
   BatteryManagement::goToSleep();
+  RFGateway::run();
+  RFGateway::system_reset();
+  RFGateway::run();
 }
 
 void Communications::run() {
@@ -249,16 +252,23 @@ void Communications::init() {
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
-    float driver_brightness     = BatteryManagement::mapRange(p.data[0], 0, 255, 0, 0.8);
-    float under_glow_brightness = BatteryManagement::mapRange(p.data[1], 0, 255, 0, 0.3);
-    LEDManagement::set_max_ledDriver_brightness(driver_brightness);
-    LEDManagement::set_max_underglow_brightness(under_glow_brightness);
-    //TODO: if saving mode is on dont set the led brightness.
-    LEDManagement::set_ledDriver_brightness(driver_brightness);
-    LEDManagement::set_underglow_brightness(under_glow_brightness);
-    LEDManagement::set_updated(true);
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %f %i %f", p.header.device, p.data[0], driver_brightness, p.data[1], under_glow_brightness);
-    DBG_PRINTF_TRACE("BRIGHTNESS after setting it: %f", driver_brightness);
+    /* p.data[0] led driver brightness
+     * p.data[1] underglow brightness
+     * p.data[2] LED effect id
+     * p.data[3] take brightness handler?
+     */
+    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
+    DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
+    DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
+    DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
+    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
+    if (p.data[3] == false){
+      DBG_PRINTF_TRACE("Calling onDismount");
+      LEDManagement::onDismount(static_cast<led_type_t >(p.data[2]));
+    } else {
+      DBG_PRINTF_TRACE("Calling onMount");
+      LEDManagement::onMount(static_cast<led_type_t >(p.data[2]),p.data[0],p.data[1]);
+    }
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
