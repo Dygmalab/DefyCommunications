@@ -46,7 +46,7 @@ class WiredCommunication {
         }
         p.header.size = 0;
         timesEnter++;
-        DBG_PRINTF_TRACE("Wired Neuron is available to connect");
+        DBG_PRINTF_TRACE("Neuron is available to connect");
         WiredCommunication::sendPacket(p);
       }
     });
@@ -62,7 +62,6 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
-      if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
@@ -168,11 +167,11 @@ class WiredCommunication {
   inline static uint16_t keep_alive_timeout      = 100;
   inline static uint32_t last_time_communication = 0;
 };
-void goToSleep(){
+void goToSleep() {
   LEDManagement::turnPowerOff();
   RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
   RFGateway::rf_disable();
-  while(RFGWCommunication::isEnabled()){
+  while (RFGWCommunication::isEnabled()) {
     RFGateway::run();
   }
   BatteryManagement::goToSleep();
@@ -185,7 +184,7 @@ void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-    //TODO: be carefull this is not going to break in the upgrade procedure.
+    //TODO: be careful this is not going to break in the upgrade procedure.
     const constexpr uint32_t timeout_no_connection = 10000;
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - KeyScanner.getLastTimeKeyPress() >= timeout_no_connection) {
@@ -262,12 +261,12 @@ void Communications::init() {
     DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
     DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
     DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
-    if (p.data[3] == false){
+    if (p.data[3] == false) {
       DBG_PRINTF_TRACE("Calling onDismount");
-      LEDManagement::onDismount(static_cast<led_type_t >(p.data[2]));
+      LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
     } else {
       DBG_PRINTF_TRACE("Calling onMount");
-      LEDManagement::onMount(static_cast<led_type_t >(p.data[2]),p.data[0],p.data[1]);
+      LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
     }
   });
 
