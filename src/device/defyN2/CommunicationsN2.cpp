@@ -62,7 +62,7 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (!TinyUSBDevice.mounted()) return;
+    if (ble_innited()) return;
     rfgw_poll();
     left.run();
     right.run();
@@ -158,7 +158,7 @@ class RFGWCommunications {
     rfgw_pipe_id_t pipe_id;
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (!TinyUSBDevice.mounted()) return;
+      if (ble_innited()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
@@ -248,7 +248,7 @@ void Communications::run() {
 bool Communications::sendPacket(Packet packet) {
   Devices device_to_send = packet.header.device;
   if (device_to_send == UNKNOWN) {
-    if (TinyUSBDevice.mounted()) {
+    if (!ble_innited()) {
       if (spiPort1Device != UNKNOWN) {
         packet.header.device = Communications_protocol::NEURON_DEFY;
         spiPort1.sendPacket(packet);
@@ -286,7 +286,7 @@ bool Communications::sendPacket(Packet packet) {
     return true;
   }
 
-  if (TinyUSBDevice.mounted()) {
+  if (!ble_innited()) {
 
     if (spiPort1Device == device_to_send) {
       packet.header.device = Communications_protocol::NEURON_DEFY;
