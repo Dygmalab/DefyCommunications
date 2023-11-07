@@ -52,8 +52,8 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
+      KeyScanner.updateLastTimeKeyPress();
       if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-        KeyScanner.updateLastTimeKeyPress();
         LEDManagement::set_mode_disconnected();
       }
       if (WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
@@ -62,6 +62,8 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
+      if (WiredCommunication::connectionEstablished)
+        return;
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
