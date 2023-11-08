@@ -233,11 +233,6 @@ void Communications::init() {
     sendPacket(p);
   });
 
-  callbacks.bind(KEYSCAN_INTERVAL, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
-    KeyScanner.keyScanInterval(p.data[0]);
-  });
-
   callbacks.bind(GET_SHORT_LED, [this](Packet p) {
     DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
     Packet packet{};
