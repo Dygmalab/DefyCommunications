@@ -297,13 +297,13 @@ bool Communications::sendPacket(Packet packet) {
       spiPort2.sendPacket(packet);
     }
   } else {
-    //This could even been improved by checking if the spi port1 is connected and only sending the message to spiport2
+    //If both of then are connected we just want to use the wired connection in both cases
     if (spiPort2Device != UNKNOWN && spiPort1Device != UNKNOWN) {
-      if (spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == BLE_DEFY_LEFT || spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == BLE_DEFY_RIGHT) {
+      if (spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT || spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort1.sendPacket(packet);
       }
-      if (spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == BLE_DEFY_LEFT || spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == BLE_DEFY_RIGHT) {
+      if (spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT || spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort2.sendPacket(packet);
       }
