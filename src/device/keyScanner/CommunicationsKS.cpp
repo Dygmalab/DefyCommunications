@@ -177,9 +177,6 @@ void goToSleep() {
     RFGateway::run();
   }
   BatteryManagement::goToSleep();
-  RFGateway::run();
-  RFGateway::system_reset();
-  RFGateway::run();
 }
 
 void Communications::run() {
