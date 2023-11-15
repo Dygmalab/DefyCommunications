@@ -62,7 +62,7 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (ble_innited()) return;
+    if (!kaleidoscope::plugin::RadioManager::isEnabled()) return;
     rfgw_poll();
     left.run();
     right.run();
@@ -158,7 +158,7 @@ class RFGWCommunications {
     rfgw_pipe_id_t pipe_id;
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (ble_innited()) return;
+      if (!kaleidoscope::plugin::RadioManager::isEnabled()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
@@ -299,11 +299,11 @@ bool Communications::sendPacket(Packet packet) {
   } else {
     //If both of then are connected we just want to use the wired connection in both cases
     if (spiPort2Device != UNKNOWN && spiPort1Device != UNKNOWN) {
-      if (spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT || spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT) {
+      if ((spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort1.sendPacket(packet);
       }
-      if (spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT || spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT) {
+      if ((spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort2.sendPacket(packet);
       }
