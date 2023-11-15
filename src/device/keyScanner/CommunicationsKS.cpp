@@ -173,7 +173,7 @@ void goToSleep() {
   LEDManagement::turnPowerOff();
   RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
   RFGateway::rf_disable();
-  while (RFGWCommunication::isEnabled()) {
+  for (int i = 0; i < 50; ++i) {
     RFGateway::run();
   }
   BatteryManagement::goToSleep();
