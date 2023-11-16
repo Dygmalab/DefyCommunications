@@ -63,7 +63,7 @@ class RFGWCommunications {
 
   static void run() {
     if (!kaleidoscope::plugin::RadioManager::isEnabled()) return;
-    rfgw_poll();
+    kaleidoscope::plugin::RadioManager::poll();
     left.run();
     right.run();
   }
