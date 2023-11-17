@@ -62,7 +62,7 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (!kaleidoscope::plugin::RadioManager::isEnabled()) return;
+    if (!kaleidoscope::plugin::RadioManager::isInited()) return;
     kaleidoscope::plugin::RadioManager::poll();
     left.run();
     right.run();
@@ -158,7 +158,7 @@ class RFGWCommunications {
     rfgw_pipe_id_t pipe_id;
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (!kaleidoscope::plugin::RadioManager::isEnabled()) return;
+      if (!kaleidoscope::plugin::RadioManager::isInited()) return;
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
