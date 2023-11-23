@@ -185,7 +185,7 @@ void Communications::run() {
   RFGWCommunication::run();
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
     //TODO: be careful this is not going to break in the upgrade procedure.
-    const constexpr uint32_t timeout_no_connection = 10000;
+    const constexpr uint32_t timeout_no_connection = 40000;
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - KeyScanner.getLastTimeKeyPress() >= timeout_no_connection) {
       goToSleep();
