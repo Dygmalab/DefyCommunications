@@ -169,11 +169,12 @@ class WiredCommunication {
   inline static uint16_t keep_alive_timeout      = 100;
   inline static uint32_t last_time_communication = 0;
 };
+
 void goToSleep() {
   LEDManagement::turnPowerOff();
   RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
   RFGateway::rf_disable();
-  for (int i = 0; i < 50; ++i) {
+  for (int i = 0; i < 100; ++i) {
     RFGateway::run();
   }
   BatteryManagement::goToSleep();
