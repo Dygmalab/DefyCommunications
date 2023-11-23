@@ -14,7 +14,7 @@
 
 constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
-
+using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
 
 
@@ -37,37 +37,38 @@ class WiredCommunication {
     Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
       if (WiredCommunication::connectionEstablished) return;
       if (p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
-        p.header.device  = device;
+        p.header.device = device;
         //This way only send one connected
-        if(timesEnter>0){
+        if (timesEnter > 0) {
           p.header.command = Communications_protocol::IS_ALIVE;
-        }else{
+        } else {
           p.header.command = Communications_protocol::CONNECTED;
         }
-        p.header.size    = 0;
+        p.header.size = 0;
         timesEnter++;
-        DBG_PRINTF_TRACE("Wired Neuron is available to connect");
+        DBG_PRINTF_TRACE("Neuron is available to connect");
         WiredCommunication::sendPacket(p);
       }
     });
 
     Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
+      KeyScanner.updateLastTimeKeyPress();
       if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-        KeyScanner.keyState(true);
         LEDManagement::set_mode_disconnected();
       }
-      if(WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished){
+      if (WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
         Communications.sendPacket(p);
       }
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
-      if (WiredCommunication::connectionEstablished) return;
+      if (WiredCommunication::connectionEstablished)
+        return;
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
-        if(p.header.device != Communications_protocol::WIRED_NEURON_DEFY){
-          WiredCommunication::bleConnection         = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
+        if (p.header.device != Communications_protocol::WIRED_NEURON_DEFY) {
+          WiredCommunication::bleConnection = p.header.device == Communications_protocol::BLE_NEURON_2_DEFY;
           if (RFGWCommunication::isEnabled() || bleConnection) {
             DBG_PRINTF_TRACE("Ble Connection");
             RFGWCommunication::communicationType = bleConnection ? RFGWCommunication::CommunicationType::BLE : RFGWCommunication::CommunicationType::WIRED;
@@ -86,7 +87,7 @@ class WiredCommunication {
   static void checkConnection() {
     if (connectionEstablished) return;
     const constexpr uint16_t keep_alive_timeout_connection = 500;
-    uint32_t ms_since_enter                     = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                                = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - last_time_communication > keep_alive_timeout_connection) {
       last_time_communication = ms_since_enter;
       Packet sending{};
@@ -95,7 +96,7 @@ class WiredCommunication {
       Packet response{};
       SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
       if (response.header.command != IS_DEAD && verifyCrc(response)) {
-        timesEnter = 0;
+        timesEnter              = 0;
         response.header.command = IS_ALIVE;
         Communications.callbacks.call(response.header.command, response);
       }
@@ -104,7 +105,7 @@ class WiredCommunication {
 
   static void pollConnection() {
     if (!connectionEstablished) return;
-    uint32_t ms_since_enter                     = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
     if (keepPooling || ms_since_enter - last_time_communication > keep_alive_timeout) {
       last_time_communication = ms_since_enter;
       Packet sending{};
@@ -123,7 +124,7 @@ class WiredCommunication {
     }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
-    DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command,response.header.command);
+    DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command, response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
       DBG_PRINTF_TRACE("Wired disconnected");
@@ -140,16 +141,16 @@ class WiredCommunication {
     }
 
     WiredCommunication::keepPooling = response.header.has_more_packets && !bleConnection;
-    keep_alive_timeout = response.header.has_more_packets && bleConnection ? 30 : 100;
+    keep_alive_timeout              = response.header.has_more_packets && bleConnection ? 30 : 100;
 
     if (verifyCrc(response)) {
       if (bleConnection) {
-        if(response.header.device == Communications_protocol::BLE_DEFY_LEFT || response.header.device == Communications_protocol::BLE_DEFY_RIGHT){
+        if (response.header.device == Communications_protocol::BLE_DEFY_LEFT || response.header.device == Communications_protocol::BLE_DEFY_RIGHT) {
           DBG_PRINTF_TRACE("Forwading packet");
           RFGWCommunication::sendPacket(response);
           return true;
         }
-        if(response.header.device == UNKNOWN){
+        if (response.header.device == UNKNOWN) {
           DBG_PRINTF_TRACE("Forwading packet");
           RFGWCommunication::sendPacket(response);
         }
@@ -161,34 +162,33 @@ class WiredCommunication {
     return false;
   }
 
-  inline static uint8_t timesEnter = 0;
+  inline static uint8_t timesEnter               = 0;
   inline static auto connectionEstablished       = false;
   inline static bool keepPooling                 = false;
   inline static bool bleConnection               = false;
-  inline static uint16_t keep_alive_timeout = 100;
+  inline static uint16_t keep_alive_timeout      = 100;
   inline static uint32_t last_time_communication = 0;
 };
+
+void goToSleep() {
+  LEDManagement::turnPowerOff();
+  RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
+  RFGateway::rf_disable();
+  for (int i = 0; i < 100; ++i) {
+    RFGateway::run();
+  }
+  BatteryManagement::goToSleep();
+}
 
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-    const constexpr uint32_t timeout_no_connection = 30000;
-    static uint32_t lastTimeKeyPress               = 0;
-    static uint32_t sleeping               = false;
-    if (KeyScanner.newKey()) {
-      KeyScanner.keyState(false);
-      lastTimeKeyPress = to_ms_since_boot(get_absolute_time());
-      if(sleeping){
-        LEDManagement::turnPowerOn();
-        sleeping = false;
-      }
-    }
-    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
-    if (!sleeping && (ms_since_enter - lastTimeKeyPress >= timeout_no_connection)) {
-      BatteryManagement::goToSleep();
-      LEDManagement::turnPowerOff();
-      sleeping = true;
+    //TODO: be careful this is not going to break in the upgrade procedure.
+    const constexpr uint32_t timeout_no_connection = 40000;
+    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    if (ms_since_enter - KeyScanner.getLastTimeKeyPress() >= timeout_no_connection) {
+      goToSleep();
     }
   }
 }
@@ -207,13 +207,11 @@ void Communications::init() {
 
   callbacks.bind(SLEEP, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received SLEEP from %i", p.header.device);
-    LEDManagement::turnPowerOff();
-    BatteryManagement::goToSleep();
+    goToSleep();
   });
 
   callbacks.bind(WAKE_UP, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received WAKE_UP from %i", p.header.device);
-    LEDManagement::turnPowerOn();
+    DBG_PRINTF_TRACE("Received WAKE_UP from %i and now is deprecated", p.header.device);
   });
 
   callbacks.bind(VERSION, [this](const Packet &p) {
@@ -248,16 +246,23 @@ void Communications::init() {
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
-    float driver_brightness     = BatteryManagement::mapRange(p.data[0], 0, 255, 0, 0.8);
-    float under_glow_brightness = BatteryManagement::mapRange(p.data[1], 0, 255, 0, 0.3);
-    LEDManagement::set_max_ledDriver_brightness(driver_brightness);
-    LEDManagement::set_max_underglow_brightness(under_glow_brightness);
-    //TODO: if saving mode is on dont set the led brightness.
-    LEDManagement::set_ledDriver_brightness(driver_brightness);
-    LEDManagement::set_underglow_brightness(under_glow_brightness);
-    LEDManagement::set_updated(true);
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i values %i %f %i %f", p.header.device, p.data[0], driver_brightness, p.data[1], under_glow_brightness);
-    DBG_PRINTF_TRACE("BRIGHTNESS after setting it: %f", driver_brightness);
+    /* p.data[0] led driver brightness
+     * p.data[1] underglow brightness
+     * p.data[2] LED effect id
+     * p.data[3] take brightness handler?
+     */
+    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
+    DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
+    DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
+    DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
+    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
+    if (p.data[3] == false) {
+      DBG_PRINTF_TRACE("Calling onDismount");
+      LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
+    } else {
+      DBG_PRINTF_TRACE("Calling onMount");
+      LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
+    }
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
@@ -341,7 +346,6 @@ void Communications::init() {
 
 
 bool Communications::sendPacket(Packet packet) {
-  DBG_PRINTF_TRACE("Trying to send packet to device %i with command %i", packet.header.device, packet.header.command);
   if (WiredCommunication::connectionEstablished)
     return WiredCommunication::sendPacket(packet);
   if (RFGWCommunication::connectionEstablished)
