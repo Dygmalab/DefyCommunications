@@ -192,34 +192,43 @@ class WiredCommunications {
     }
   }
 
-  static void checkActive(uint8_t port) {
+  static void disconnect(uint8_t port) {
     SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
     Devices &device                    = port == 1 ? spiPort1Device : spiPort2Device;
-    uint32_t const &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
+    Packet packet{};
 
-    bool now_active;
-    Packet packet;
-
-    if (device != UNKNOWN) {
-      now_active = millis() - lastCommunications <= TIMEOUT;
-      if (!now_active) {
-        packet.header.command = Communications_protocol::DISCONNECTED;
-        packet.header.device  = device;
-        Communications.callbacks.call(packet.header.command, packet);
-        device = UNKNOWN;
-        //Remove all the left packets at disconnections
-        spiPort.clearRead();
-        spiPort.clearSend();
-      }
-    }
+    packet.header.command = Communications_protocol::DISCONNECTED;
+    packet.header.device  = device;
+    Communications.callbacks.call(packet.header.command, packet);
+    device = UNKNOWN;
+    //Remove all the left packets at disconnections
+    spiPort.clearRead();
+    spiPort.clearSend();
   }
 
   static void run() {
-    readPacket(1);
-    checkActive(1);
 
-    readPacket(2);
-    checkActive(2);
+    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
+    static bool wasLeftConnected = false;
+    auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
+    if (isDefyLeftWired) {
+      readPacket(1);
+    }
+    if(wasLeftConnected && !isDefyLeftWired) {
+      disconnect(1);
+    }
+    wasLeftConnected = isDefyLeftWired;
+
+    static bool wasRightConnected = false;
+    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    if (isDefyRightWired) {
+      readPacket(2);
+    }
+    if(wasRightConnected && !isDefyRightWired) {
+      disconnect(2);
+    }
+    wasRightConnected = isDefyRightWired;
+
   }
 };
 
