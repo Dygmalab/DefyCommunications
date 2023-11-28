@@ -58,6 +58,7 @@ class RFGWCommunications {
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
       }
+
     });
   }
 
