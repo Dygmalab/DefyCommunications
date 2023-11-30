@@ -24,7 +24,7 @@ void checkActive();
 class RFGWCommunications {
  public:
   static void cbPipeDisconnection(rfgw_pipe_id_t pipeId) {
-    NRF_LOG_DEBUG("Disconnected RF %lu", pipeId);
+//    NRF_LOG_DEBUG("Disconnected RF %lu", pipeId);
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = false;
     Packet packet{};
@@ -40,7 +40,7 @@ class RFGWCommunications {
   static void cbPipeConnection(rfgw_pipe_id_t pipeId) {
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = true;
-    NRF_LOG_DEBUG("Connected RF %lu", pipeId);
+//    NRF_LOG_DEBUG("Connected RF %lu", pipeId);
     Packet packet{};
     packet.header.command = Communications_protocol::CONNECTED;
     packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT : RF_DEFY_LEFT;
@@ -228,7 +228,7 @@ void Communications::init() {
     p.header.size    = 0;
     p.header.device  = p.header.device;
     p.header.command = CONNECTED;
-    NRF_LOG_INFO("Get connected from %i", p.header.device);
+    //NRF_LOG_INFO("Get connected from %i", p.header.device);
     sendPacket(p);
   });
 
