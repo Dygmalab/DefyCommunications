@@ -9,7 +9,7 @@
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
 
-#define DEBUG_LOG_N2_COMMUNICATIONS     0
+#define DEBUG_LOG_N2_COMMUNICATIONS     1
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
