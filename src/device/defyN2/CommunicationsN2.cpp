@@ -9,6 +9,7 @@
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
 
+#define DEBUG_LOG_N2_COMMUNICATIONS     1
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -24,7 +25,10 @@ void checkActive();
 class RFGWCommunications {
  public:
   static void cbPipeDisconnection(rfgw_pipe_id_t pipeId) {
+#if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Disconnected RF %lu", pipeId);
+#endif
+
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = false;
     Packet packet{};
@@ -40,7 +44,11 @@ class RFGWCommunications {
   static void cbPipeConnection(rfgw_pipe_id_t pipeId) {
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = true;
+
+#if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Connected RF %lu", pipeId);
+#endif
+
     Packet packet{};
     packet.header.command = Communications_protocol::CONNECTED;
     packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT : RF_DEFY_LEFT;
@@ -58,6 +66,7 @@ class RFGWCommunications {
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
       }
+
     });
   }
 
@@ -192,34 +201,43 @@ class WiredCommunications {
     }
   }
 
-  static void checkActive(uint8_t port) {
+  static void disconnect(uint8_t port) {
     SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
     Devices &device                    = port == 1 ? spiPort1Device : spiPort2Device;
-    uint32_t const &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
+    Packet packet{};
 
-    bool now_active;
-    Packet packet;
-
-    if (device != UNKNOWN) {
-      now_active = millis() - lastCommunications <= TIMEOUT;
-      if (!now_active) {
-        packet.header.command = Communications_protocol::DISCONNECTED;
-        packet.header.device  = device;
-        Communications.callbacks.call(packet.header.command, packet);
-        device = UNKNOWN;
-        //Remove all the left packets at disconnections
-        spiPort.clearRead();
-        spiPort.clearSend();
-      }
-    }
+    packet.header.command = Communications_protocol::DISCONNECTED;
+    packet.header.device  = device;
+    Communications.callbacks.call(packet.header.command, packet);
+    device = UNKNOWN;
+    //Remove all the left packets at disconnections
+    spiPort.clearRead();
+    spiPort.clearSend();
   }
 
   static void run() {
-    readPacket(1);
-    checkActive(1);
 
-    readPacket(2);
-    checkActive(2);
+    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
+    static bool wasLeftConnected = false;
+    auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
+    if (isDefyLeftWired) {
+      readPacket(1);
+    }
+    if(wasLeftConnected && !isDefyLeftWired) {
+      disconnect(1);
+    }
+    wasLeftConnected = isDefyLeftWired;
+
+    static bool wasRightConnected = false;
+    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    if (isDefyRightWired) {
+      readPacket(2);
+    }
+    if(wasRightConnected && !isDefyRightWired) {
+      disconnect(2);
+    }
+    wasRightConnected = isDefyRightWired;
+
   }
 };
 
@@ -228,7 +246,10 @@ void Communications::init() {
     p.header.size    = 0;
     p.header.device  = p.header.device;
     p.header.command = CONNECTED;
+
+#if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_INFO("Get connected from %i", p.header.device);
+#endif
     sendPacket(p);
   });
 
