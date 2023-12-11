@@ -62,8 +62,12 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(CONNECTED, [](Packet const &p) {
-      if (WiredCommunication::connectionEstablished)
-        return;
+      if (WiredCommunication::connectionEstablished) {
+        //In this case the neuron tought the communication was wired but latter decided to change to BLE in this case let the connected to his job otherwise return
+        if (RFGWCommunication::communicationType != RFGWCommunication::CommunicationType::WIRED || p.header.device != Communications_protocol::BLE_NEURON_2_DEFY) {
+          return;
+        }
+      }
       if (p.header.device == Communications_protocol::NEURON_DEFY || p.header.device == Communications_protocol::WIRED_NEURON_DEFY || p.header.device == Communications_protocol::BLE_NEURON_2_DEFY) {
         DBG_PRINTF_TRACE("Neuron wired connected %i", p.header.device);
         WiredCommunication::connectionEstablished = true;
