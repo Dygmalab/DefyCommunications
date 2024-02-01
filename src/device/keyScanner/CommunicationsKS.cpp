@@ -128,7 +128,7 @@ class WiredCommunication {
     }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
-    DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command, response.header.command);
+    //DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command, response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
       DBG_PRINTF_TRACE("Wired disconnected");
