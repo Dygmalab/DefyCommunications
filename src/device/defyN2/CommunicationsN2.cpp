@@ -9,7 +9,9 @@
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
 
-#define DEBUG_LOG_N2_COMMUNICATIONS     1
+
+#define DEBUG_LOG_N2_COMMUNICATIONS     0
+
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -18,7 +20,6 @@ static uint32_t spiPort1LastCommunication{0};
 static SpiPort spiPort2(2);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
-static uint32_t TIMEOUT = 300;
 
 void checkActive();
 
