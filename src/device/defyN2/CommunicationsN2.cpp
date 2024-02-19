@@ -9,7 +9,7 @@
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
 
-#define DEBUG_LOG_N2_COMMUNICATIONS     1
+#define DEBUG_LOG_N2_COMMUNICATIONS 1
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -66,17 +66,18 @@ class RFGWCommunications {
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
       }
-
     });
   }
 
   static void run() {
-    if (!kaleidoscope::plugin::RadioManager::isInited()) return;
-    kaleidoscope::plugin::RadioManager::poll();
+    if (!RadioManager.isInited()) {
+      return;
+    }
+
+    RadioManager.run();
     left.run();
     right.run();
   }
-
 
   struct Side {
     explicit Side(rfgw_pipe_id_t pipe)
@@ -156,6 +157,7 @@ class RFGWCommunications {
       if (!tx_messages.empty()) {
         Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
         uint16_t size_to_transfer                         = packet.getSize();
+
         if (pipe_send_loadsize >= size_to_transfer) {
           rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
           tx_messages.pop();
@@ -167,20 +169,23 @@ class RFGWCommunications {
     rfgw_pipe_id_t pipe_id;
     std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
     void sendPacket(Packet &packet) {
-      if (!kaleidoscope::plugin::RadioManager::isInited()) return;
+      if (!RadioManager.isInited()) {
+        return;
+      }
+
       packet.header.crc    = 0;
       packet.header.device = Communications_protocol::RF_NEURON_DEFY;
       packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
       tx_messages.emplace(packet);
     };
   };
+
   static Side left;
   static Side right;
 };
 
 RFGWCommunications::Side RFGWCommunications::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
 RFGWCommunications::Side RFGWCommunications::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
-
 
 class WiredCommunications {
  public:
@@ -202,8 +207,8 @@ class WiredCommunications {
   }
 
   static void disconnect(uint8_t port) {
-    SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
-    Devices &device                    = port == 1 ? spiPort1Device : spiPort2Device;
+    SpiPort &spiPort = port == 1 ? spiPort1 : spiPort2;
+    Devices &device  = port == 1 ? spiPort1Device : spiPort2Device;
     Packet packet{};
 
     packet.header.command = Communications_protocol::DISCONNECTED;
@@ -217,27 +222,26 @@ class WiredCommunications {
 
   static void run() {
 
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
+    auto const &keyScanner       = kaleidoscope::Runtime.device().keyScanner();
     static bool wasLeftConnected = false;
-    auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
+    auto isDefyLeftWired         = keyScanner.leftSideWiredConnection();
     if (isDefyLeftWired) {
       readPacket(1);
     }
-    if(wasLeftConnected && !isDefyLeftWired) {
+    if (wasLeftConnected && !isDefyLeftWired) {
       disconnect(1);
     }
     wasLeftConnected = isDefyLeftWired;
 
     static bool wasRightConnected = false;
-    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    auto isDefyRightWired         = keyScanner.rightSideWiredConnection();
     if (isDefyRightWired) {
       readPacket(2);
     }
-    if(wasRightConnected && !isDefyRightWired) {
+    if (wasRightConnected && !isDefyRightWired) {
       disconnect(2);
     }
     wasRightConnected = isDefyRightWired;
-
   }
 };
 
