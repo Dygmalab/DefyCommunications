@@ -338,6 +338,11 @@ void Communications::init() {
     }
   });
 
+  callbacks.bind(CONFIGURATION, [](Packet const &p) {
+    DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
+    KeyScanner.send_configuration_package();
+  });
+
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
