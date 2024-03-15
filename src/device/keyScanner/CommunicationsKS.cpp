@@ -184,6 +184,39 @@ void goToSleep() {
   BatteryManagement::goToSleep();*/
 }
 
+void check_if_keyboard_is_wired_wireless(){
+  static uint8_t counter = 0;
+  static bool configuration_set = false;
+
+  if (WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished && !configuration_set){
+    //We are on a wired keyboard.
+    const constexpr uint32_t timeout = 500;
+    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    static uint32_t last_time                       = ms_since_enter;
+
+    if (ms_since_enter - last_time >= timeout) {
+      last_time = ms_since_enter;
+      counter++;
+      if (counter>5) {
+        KeyScanner.specifications.conection = Pins::Device::Wired;
+        counter = 0;
+        configuration_set = true;
+        //debug message
+        if (KeyScanner.specifications.conection == Pins::Device::Wired){
+          DBG_PRINTF_TRACE("keyboard connection wired" );
+          DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
+          DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+        } else {
+          DBG_PRINTF_TRACE("something went wrong" );
+        }
+      }
+    }
+  } else if (RFGWCommunication::connectionEstablished){
+    configuration_set = true;
+    KeyScanner.specifications.conection = Pins::Device::Wireless;
+  }
+}
+
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
@@ -195,8 +228,8 @@ void Communications::run() {
       goToSleep();
     }
   }
+  check_if_keyboard_is_wired_wireless();
 }
-
 
 void Communications::init() {
 
@@ -255,16 +288,16 @@ void Communications::init() {
      * p.data[2] LED effect id
      * p.data[3] take brightness handler?
      */
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
+/*    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
     DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
     DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
     DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
-    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
+    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);*/
     if (p.data[3] == false) {
-      DBG_PRINTF_TRACE("Calling onDismount");
+      //DBG_PRINTF_TRACE("Calling onDismount");
       LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
     } else {
-      DBG_PRINTF_TRACE("Calling onMount");
+     // DBG_PRINTF_TRACE("Calling onMount");
       LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
     }
   });
@@ -345,7 +378,7 @@ void Communications::init() {
 
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
+   // DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
     BatteryManagement::set_battery_saving(p.data[0]);
   });
 
