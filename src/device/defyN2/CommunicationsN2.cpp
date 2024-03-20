@@ -241,6 +241,13 @@ class WiredCommunications {
   }
 };
 
+static void get_keyscanner_configuration(){
+  NRF_LOG_DEBUG("Sending configuration command to KS");
+  Communications_protocol::Packet p{};
+  p.header.command = Communications_protocol::CONFIGURATION;
+  Communications.sendPacket(p);
+}
+
 void Communications::init() {
   callbacks.bind(CONNECTED, [this](Packet p) {
     p.header.size    = 0;
@@ -251,6 +258,8 @@ void Communications::init() {
     NRF_LOG_INFO("Get connected from %i", p.header.device);
 #endif
     sendPacket(p);
+
+    get_keyscanner_configuration();
   });
 
 
