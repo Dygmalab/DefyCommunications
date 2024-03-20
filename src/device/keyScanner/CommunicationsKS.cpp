@@ -206,6 +206,8 @@ void check_if_keyboard_is_wired_wireless(){
           DBG_PRINTF_TRACE("keyboard connection wired" );
           DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
           DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+          DBG_PRINTF_TRACE("Chip id: ");
+          DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
         } else {
           DBG_PRINTF_TRACE("something went wrong" );
         }
