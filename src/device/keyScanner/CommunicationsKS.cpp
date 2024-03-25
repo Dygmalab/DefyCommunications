@@ -344,9 +344,9 @@ void Communications::init() {
       swap = !swap;
     }
     if (layerIndex == 0){
-      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
+/*      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
         DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
-      }
+      }*/
     }
 
   });
@@ -377,6 +377,11 @@ void Communications::init() {
       }
       swap = !swap;
     }
+/*    if (layerIndex == 0){
+      for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j){
+        DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
+      }
+    }*/
   });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
