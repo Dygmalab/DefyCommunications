@@ -197,25 +197,40 @@ void check_if_keyboard_is_wired_wireless(){
     if (ms_since_enter - last_time >= timeout) {
       last_time = ms_since_enter;
       counter++;
-      if (counter>5) {
+
+      if (counter > 3) {
         KeyScanner.specifications.conection = Pins::Device::Wired;
         counter = 0;
         configuration_set = true;
         //debug message
-        if (KeyScanner.specifications.conection == Pins::Device::Wired){
-          DBG_PRINTF_TRACE("keyboard connection wired" );
+          /*DBG_PRINTF_TRACE("keyboard connection wired" );
           DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
           DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
           DBG_PRINTF_TRACE("Chip id: ");
-          DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
-        } else {
-          DBG_PRINTF_TRACE("something went wrong" );
-        }
+          DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);*/
       }
     }
-  } else if (RFGWCommunication::connectionEstablished){
-    configuration_set = true;
-    KeyScanner.specifications.conection = Pins::Device::Wireless;
+  } else if (RFGWCommunication::connectionEstablished && !configuration_set){
+    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    const constexpr uint32_t timeout = 2000;
+    static uint32_t last_time                       = ms_since_enter;
+
+    if (ms_since_enter - last_time >= timeout) {
+      last_time = ms_since_enter;
+      configuration_set = true;
+      KeyScanner.specifications.conection = Pins::Device::Wireless;
+      //debug message
+      /*DBG_PRINTF_TRACE("keyboard connection wireless" );
+      DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
+      DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+      DBG_PRINTF_TRACE("Chip id: ");
+      DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
+      DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
+    }
+  }
+  if (configuration_set && KeyScanner.get_information_asked()){
+      KeyScanner.send_configuration_package();
+      KeyScanner.information_asked(false);
   }
 }
 
@@ -386,7 +401,8 @@ void Communications::init() {
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
-    KeyScanner.send_configuration_package();
+
+    KeyScanner.information_asked(true);
   });
 
   //Battery
