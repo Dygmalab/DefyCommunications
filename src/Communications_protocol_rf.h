@@ -11,7 +11,7 @@
 
 #ifdef NRF52_ARCH
 #include "types.h"
-#include "rf_gateway_api.h"
+#include "rf_host_device_api.h"
 #include "memory/buffer.h"
 #include "rfgw_protocol_types.h"
 #endif
