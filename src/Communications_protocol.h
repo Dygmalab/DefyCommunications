@@ -47,6 +47,7 @@ enum Commands : uint8_t {
   BATTERY_SAVING,
   //Config
   RF_ADDRESS = 50,
+  CONFIGURATION
 };
 
 static_assert(sizeof(Commands) == sizeof(uint8_t));
