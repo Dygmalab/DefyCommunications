@@ -11,9 +11,9 @@
 
 #ifdef NRF52_ARCH
 #include "types.h"
-#include "rf_gateway.h"
+#include "rf_host_device_api.h"
 #include "memory/buffer.h"
-#include "devices/Dygma/rf_gateway/rfgw_protocol_types.h"
+#include "rfgw_protocol_types.h"
 #endif
 
 namespace Communications_protocol_rf {
