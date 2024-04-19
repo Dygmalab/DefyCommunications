@@ -16,7 +16,7 @@ constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
-
+bool info_was_requested = false;
 
 bool verifyCrc(Packet &packet) {
   uint8_t rx_crc    = packet.header.crc;
@@ -400,9 +400,12 @@ void Communications::init() {
   });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
+    if (!info_was_requested){
+      KeyScanner.information_asked(true);
+      info_was_requested = true;
+    }
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
 
-    KeyScanner.information_asked(true);
   });
 
   //Battery
