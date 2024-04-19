@@ -16,6 +16,7 @@ constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
+bool packet_was_requested = false;
 
 
 bool verifyCrc(Packet &packet) {
@@ -243,10 +244,11 @@ void Communications::run() {
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
       goToSleep();
-    }
+      }
   }
   check_if_keyboard_is_wired_wireless();
 }
+
 
 void Communications::init() {
 
@@ -401,8 +403,10 @@ void Communications::init() {
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
-
-    KeyScanner.information_asked(true);
+    if (!packet_was_requested){
+      KeyScanner.information_asked(true);
+      packet_was_requested = true;
+    }
   });
 
   //Battery
