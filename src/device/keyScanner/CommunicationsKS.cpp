@@ -16,7 +16,7 @@ constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
-
+bool info_was_requested = false;
 
 bool verifyCrc(Packet &packet) {
   uint8_t rx_crc    = packet.header.crc;
@@ -52,7 +52,7 @@ class WiredCommunication {
     });
 
     Communications.callbacks.bind(DISCONNECTED, [](Packet p) {
-      KeyScanner.update_ms_since_last_key_sent();
+        KeyScanner.update_ms_since_last_key_sent();
       if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
         LEDManagement::set_mode_disconnected();
       }
@@ -128,7 +128,7 @@ class WiredCommunication {
     }
     calculateCRC(sending);
     SPI::read_write_buffer(SPI::CSList::CSN2, sending.buf, response.buf, sizeof(Packet));
-    DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command, response.header.command);
+    //DBG_PRINTF_TRACE("Sending is %i got answer %i", sending.header.command, response.header.command);
     //This should only happen if there is a disconnection
     if (response.header.command == IS_DEAD) {
       DBG_PRINTF_TRACE("Wired disconnected");
@@ -175,13 +175,63 @@ class WiredCommunication {
 };
 
 void goToSleep() {
-  LEDManagement::turnPowerOff();
+ /* LEDManagement::turnPowerOff();
   RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
   RFGateway::rf_disable();
   for (int i = 0; i < 100; ++i) {
     RFGateway::run();
   }
-  BatteryManagement::goToSleep();
+  BatteryManagement::goToSleep();*/
+}
+
+void check_if_keyboard_is_wired_wireless(){
+  static uint8_t counter = 0;
+  static bool configuration_set = false;
+
+  if (WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished && !configuration_set){
+    //We are on a wired keyboard.
+    const constexpr uint32_t timeout = 500;
+    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    static uint32_t last_time                       = ms_since_enter;
+
+    if (ms_since_enter - last_time >= timeout) {
+      last_time = ms_since_enter;
+      counter++;
+
+      if (counter > 3) {
+        KeyScanner.specifications.conection = Pins::Device::Wired;
+        counter = 0;
+        configuration_set = true;
+        //debug message
+          /*DBG_PRINTF_TRACE("keyboard connection wired" );
+          DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
+          DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+          DBG_PRINTF_TRACE("Chip id: ");
+          DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);*/
+      }
+    }
+  } else if (RFGWCommunication::connectionEstablished && !configuration_set){
+    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    const constexpr uint32_t timeout = 2000;
+    static uint32_t last_time                       = ms_since_enter;
+
+    if (ms_since_enter - last_time >= timeout) {
+      last_time = ms_since_enter;
+      configuration_set = true;
+      KeyScanner.specifications.conection = Pins::Device::Wireless;
+      //debug message
+      /*DBG_PRINTF_TRACE("keyboard connection wireless" );
+      DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
+      DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+      DBG_PRINTF_TRACE("Chip id: ");
+      DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
+      DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
+    }
+  }
+  if (configuration_set && KeyScanner.get_information_asked()){
+      KeyScanner.send_configuration_package();
+      KeyScanner.information_asked(false);
+  }
 }
 
 void Communications::run() {
@@ -191,12 +241,12 @@ void Communications::run() {
     //TODO: be careful this is not going to break in the upgrade procedure.
     const constexpr uint32_t timeout_no_connection = 40000;
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
-    if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
+    if (ms_since_enter -  KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
       goToSleep();
     }
   }
+  check_if_keyboard_is_wired_wireless();
 }
-
 
 void Communications::init() {
 
@@ -255,16 +305,16 @@ void Communications::init() {
      * p.data[2] LED effect id
      * p.data[3] take brightness handler?
      */
-    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
+/*    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
     DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
     DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
     DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
-    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
+    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);*/
     if (p.data[3] == false) {
-      DBG_PRINTF_TRACE("Calling onDismount");
+      //DBG_PRINTF_TRACE("Calling onDismount");
       LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
     } else {
-      DBG_PRINTF_TRACE("Calling onMount");
+     // DBG_PRINTF_TRACE("Calling onMount");
       LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
     }
   });
@@ -308,6 +358,12 @@ void Communications::init() {
       }
       swap = !swap;
     }
+    if (layerIndex == 0){
+/*      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
+        DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
+      }*/
+    }
+
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
@@ -336,11 +392,25 @@ void Communications::init() {
       }
       swap = !swap;
     }
+/*    if (layerIndex == 0){
+      for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j){
+        DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
+      }
+    }*/
+  });
+
+  callbacks.bind(CONFIGURATION, [](Packet const &p) {
+    if (!info_was_requested){
+      KeyScanner.information_asked(true);
+      info_was_requested = true;
+    }
+    DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
+
   });
 
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
+   // DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
     BatteryManagement::set_battery_saving(p.data[0]);
   });
 

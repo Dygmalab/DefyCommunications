@@ -2,7 +2,8 @@
 #include "Communications.h"
 #include "Communications_protocol_rf.h"
 #include "SpiPort.h"
-#include "rf_host_device_api.h"
+#include "rfgw_config_app.h"
+#include "rf_gateway.h"
 #include "CRC_wrapper.h"
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
@@ -76,7 +77,6 @@ class RFGWCommunications {
     left.run();
     right.run();
   }
-
 
   struct Side {
     explicit Side(rfgw_pipe_id_t pipe)
@@ -181,15 +181,17 @@ class RFGWCommunications {
 RFGWCommunications::Side RFGWCommunications::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
 RFGWCommunications::Side RFGWCommunications::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
 
-
-class WiredCommunications {
+class WiredCommunications
+{
  public:
-  static void init() {
+  static void init()
+  {
     spiPort1.init();
     spiPort2.init();
   }
 
-  static void readPacket(uint8_t port) {
+  static void readPacket(uint8_t port)
+  {
     SpiPort &spiPort             = port == 1 ? spiPort1 : spiPort2;
     Devices &device              = port == 1 ? spiPort1Device : spiPort2Device;
     uint32_t &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
@@ -201,7 +203,8 @@ class WiredCommunications {
     }
   }
 
-  static void disconnect(uint8_t port) {
+  static void disconnect(uint8_t port)
+  {
     SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
     Devices &device                    = port == 1 ? spiPort1Device : spiPort2Device;
     Packet packet{};
@@ -215,8 +218,8 @@ class WiredCommunications {
     spiPort.clearSend();
   }
 
-  static void run() {
-
+  static void run()
+  {
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
     static bool wasLeftConnected = false;
     auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
@@ -241,7 +244,17 @@ class WiredCommunications {
   }
 };
 
-void Communications::init() {
+static void get_keyscanner_configuration(uint8_t side){
+  NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
+  Communications_protocol::Packet p{};
+  //p.header.device  = static_cast<Devices>(side);
+  p.header.size = 1;
+  p.header.command = Communications_protocol::CONFIGURATION;
+  Communications.sendPacket(p);
+}
+
+void Communications::init()
+{
   callbacks.bind(CONNECTED, [this](Packet p) {
     p.header.size    = 0;
     p.header.device  = p.header.device;
@@ -251,112 +264,143 @@ void Communications::init() {
     NRF_LOG_INFO("Get connected from %i", p.header.device);
 #endif
     sendPacket(p);
+    get_keyscanner_configuration(p.header.device);
   });
 
-
   WiredCommunications::init();
-
-
   RFGWCommunications::init();
 }
 
-void Communications::run() {
+void Communications::run()
+{
   WiredCommunications::run();
-
   RFGWCommunications::run();
 }
 
-bool Communications::sendPacket(Packet packet) {
+bool Communications::sendPacket(Packet packet)
+{
   Devices device_to_send = packet.header.device;
+
   if (device_to_send == UNKNOWN) {
     if (!ble_innited()) {
       if (spiPort1Device != UNKNOWN) {
         packet.header.device = Communications_protocol::NEURON_DEFY;
         spiPort1.sendPacket(packet);
       }
+
       if (spiPort2Device != UNKNOWN) {
         packet.header.device = Communications_protocol::NEURON_DEFY;
         spiPort2.sendPacket(packet);
       }
-    } else {
+    }
+    else
+    {
       if (spiPort2Device != UNKNOWN) {
         if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
           packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         }
+
         if (device_to_send == UNKNOWN) {
           packet.header.device = Communications_protocol::UNKNOWN;
         }
+
         spiPort2.sendPacket(packet);
       }
+
       if (spiPort1Device != UNKNOWN) {
         if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
           packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         }
+
         if (device_to_send == UNKNOWN) {
           packet.header.device = Communications_protocol::UNKNOWN;
         }
+
         spiPort1.sendPacket(packet);
       }
     }
 
-
-    if (RFGWCommunications::right.connected)
+    if (RFGWCommunications::right.connected) {
       RFGWCommunications::right.sendPacket(packet);
-    if (RFGWCommunications::left.connected)
+    }
+
+    if (RFGWCommunications::left.connected) {
       RFGWCommunications::left.sendPacket(packet);
+    }
+
     return true;
   }
 
-  if (!ble_innited()) {
-
-    if (spiPort1Device == device_to_send) {
+  if (!ble_innited())
+  {
+    if (spiPort1Device == device_to_send)
+    {
       packet.header.device = Communications_protocol::NEURON_DEFY;
       spiPort1.sendPacket(packet);
     }
-    if (spiPort2Device == device_to_send) {
+
+    if (spiPort2Device == device_to_send)
+    {
       packet.header.device = Communications_protocol::NEURON_DEFY;
       spiPort2.sendPacket(packet);
     }
-  } else {
+  }
+  else
+  {
     //If both of then are connected we just want to use the wired connection in both cases
-    if (spiPort2Device != UNKNOWN && spiPort1Device != UNKNOWN) {
+    if (spiPort2Device != UNKNOWN && spiPort1Device != UNKNOWN)
+    {
       if ((spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort1.sendPacket(packet);
       }
+
       if ((spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
         packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         spiPort2.sendPacket(packet);
       }
-    } else {
-      if (spiPort2Device != UNKNOWN) {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
+    }
+    else
+    {
+      if (spiPort2Device != UNKNOWN)
+      {
+        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT)
+        {
           packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         }
+
         spiPort2.sendPacket(packet);
       }
 
-      if (spiPort1Device != UNKNOWN) {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
+      if (spiPort1Device != UNKNOWN)
+      {
+        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT)
+        {
           packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
         }
+
         spiPort1.sendPacket(packet);
       }
     }
+
     //No need to continue RF is disabled in ble mode
     return true;
   }
 
   if (RFGWCommunications::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
+  {
     RFGWCommunications::left.sendPacket(packet);
-
+  }
 
   if (RFGWCommunications::right.connected && device_to_send == Communications_protocol::RF_DEFY_RIGHT)
+  {
     RFGWCommunications::right.sendPacket(packet);
+  }
 
   return true;
 }
 
-
 class Communications Communications;
+
+
 #endif
