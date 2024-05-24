@@ -175,13 +175,13 @@ class WiredCommunication {
 };
 
 void goToSleep() {
- /* LEDManagement::turnPowerOff();
+  LEDManagement::turnPowerOff();
   RFGWCommunication::communicationType = RFGWCommunication::CommunicationType::DISABLED;
   RFGateway::rf_disable();
   for (int i = 0; i < 100; ++i) {
     RFGateway::run();
   }
-  BatteryManagement::goToSleep();*/
+  BatteryManagement::goToSleep();
 }
 
 void check_if_keyboard_is_wired_wireless(){
