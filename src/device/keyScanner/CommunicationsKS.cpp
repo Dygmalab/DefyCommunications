@@ -29,6 +29,7 @@ void goToSleep() {
   BatteryManagement::goToSleep();
 }
 
+#if COMPILE_RAISE2_KEYBOARD
 void check_if_keyboard_is_wired_wireless(){
   static uint8_t counter = 0;
   static bool configuration_set = false;
@@ -55,7 +56,9 @@ void check_if_keyboard_is_wired_wireless(){
           DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);*/
       }
     }
-  } else if (RFGWCommunication::connectionEstablished && !configuration_set){
+  }
+  else if (RFGWCommunication::connectionEstablished && !configuration_set)
+  {
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
     const constexpr uint32_t timeout = 2000;
     static uint32_t last_time                       = ms_since_enter;
@@ -73,11 +76,13 @@ void check_if_keyboard_is_wired_wireless(){
       DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
     }
   }
+
   if (configuration_set && KeyScanner.get_information_asked()){
       KeyScanner.send_configuration_package();
       KeyScanner.information_asked(false);
   }
 }
+#endif  // #if COMPILE_RAISE2_KEYBOARD
 
 void Communications::run() {
   WiredCommunication::run();
@@ -90,11 +95,14 @@ void Communications::run() {
       goToSleep();
     }
   }
+
+#if COMPILE_RAISE2_KEYBOARD
   check_if_keyboard_is_wired_wireless();
+#endif
 }
 
-void Communications::init() {
-
+void Communications::init()
+{
   if (gpio_get(SIDE_ID)) {
     device = Communications_protocol::KEYSCANNER_DEFY_RIGHT;
   } else {
@@ -102,7 +110,6 @@ void Communications::init() {
   }
 
   auto empty_func = [](Packet const &) {};
-
 
   callbacks.bind(SLEEP, [](Packet const &p) {
     DBG_PRINTF_TRACE("Received SLEEP from %i", p.header.device);
@@ -203,12 +210,12 @@ void Communications::init() {
       }
       swap = !swap;
     }
-    if (layerIndex == 0){
-/*      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
-        DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
-      }*/
-    }
 
+//    if (layerIndex == 0) {
+//      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
+//        DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
+//      }
+//    }
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
@@ -237,21 +244,23 @@ void Communications::init() {
       }
       swap = !swap;
     }
-/*    if (layerIndex == 0){
-      for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j){
-        DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
-      }
-    }*/
+
+//    if (layerIndex == 0){
+//      for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j){
+//        DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
+//      }
+//    }
   });
 
+#if COMPILE_RAISE2_KEYBOARD
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
     if (!info_was_requested){
       KeyScanner.information_asked(true);
       info_was_requested = true;
     }
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
-
   });
+#endif
 
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
