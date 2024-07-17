@@ -2,7 +2,8 @@
 #include "Communications.h"
 #include "Communications_protocol_rf.h"
 #include "SpiPort.h"
-#include "rf_host_device_api.h"
+#include "rfgw_config_app.h"
+#include "rf_gateway.h"
 #include "CRC_wrapper.h"
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
@@ -243,7 +244,6 @@ class WiredCommunications
   }
 };
 
-#if COMPILE_RAISE2_KEYBOARD
 static void get_keyscanner_configuration(uint8_t side){
   NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
   Communications_protocol::Packet p{};
@@ -252,7 +252,6 @@ static void get_keyscanner_configuration(uint8_t side){
   p.header.command = Communications_protocol::CONFIGURATION;
   Communications.sendPacket(p);
 }
-#endif
 
 void Communications::init()
 {
@@ -265,10 +264,7 @@ void Communications::init()
     NRF_LOG_INFO("Get connected from %i", p.header.device);
 #endif
     sendPacket(p);
-
-#if COMPILE_RAISE2_KEYBOARD
     get_keyscanner_configuration(p.header.device);
-#endif
   });
 
   WiredCommunications::init();
