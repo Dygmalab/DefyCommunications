@@ -1,6 +1,8 @@
-#if defined(NRF52_ARCH) || defined(KEYSCANNER)
 #ifndef KEYSCANNER_COMMUNICATIONS_PROTOCOL_RF_H_
 #define KEYSCANNER_COMMUNICATIONS_PROTOCOL_RF_H_
+
+#if defined(NRF52_ARCH) || defined(KEYSCANNER)
+
 #include "stdio.h"
 #include "Communications_protocol.h"
 
@@ -8,12 +10,11 @@
 #include "RFGateway.hpp"
 #endif
 
-
 #ifdef NRF52_ARCH
 #include "types.h"
-#include "rf_gateway.h"
+#include "rf_host_device_api.h"
 #include "memory/buffer.h"
-#include "devices/Dygma/rf_gateway/rfgw_protocol_types.h"
+#include "rfgw_protocol_types.h"
 #endif
 
 namespace Communications_protocol_rf {
@@ -61,5 +62,8 @@ typedef struct
 result_t parseBuffer(parse_t *p_parse, buffer_t *p_buffer);
 
 }  // namespace Communications_protocol_rf
-#endif
-#endif
+
+
+#endif  // defined(NRF52_ARCH) || defined(KEYSCANNER)
+
+#endif  // KEYSCANNER_COMMUNICATIONS_PROTOCOL_RF_H_

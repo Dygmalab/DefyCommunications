@@ -1,6 +1,9 @@
 #ifndef KEYSCANNER_COMMUNICATIONS_PROTOCOL_H_
 #define KEYSCANNER_COMMUNICATIONS_PROTOCOL_H_
+
+
 #include "stdio.h"
+
 
 namespace Communications_protocol {
 
@@ -74,8 +77,11 @@ union Packet {
   };
   uint8_t buf[MAX_TRANSFER_SIZE];
 };
+
 static_assert(sizeof(Packet) == MAX_TRANSFER_SIZE);
 
 
 }  // namespace Communications_protocol
-#endif
+
+
+#endif  // KEYSCANNER_COMMUNICATIONS_PROTOCOL_H_

@@ -1,4 +1,5 @@
 #if defined(NRF52_ARCH) || defined(KEYSCANNER)
+
 #include "Communications_protocol_rf.h"
 
 #ifdef KEYSCANNER
@@ -25,6 +26,7 @@
 #define PKT_HEADER_SIZE      (sizeof(Communications_protocol::Header))
 #define PKT_FULL_HEADER_SIZE (PKT_DELIMITER_SIZE + PKT_HEADER_SIZE)
 
+
 typedef struct
 {
   /* Parse status code */
@@ -34,7 +36,6 @@ typedef struct
   uint8_t pkt_size;
   Communications_protocol_rf::WrapperPacket wrapperPacket;
 } parse_t;
-
 
 static result_t _get_header(buffer_t *p_buffer, Communications_protocol::Header *p_header) {
   result_t result          = RESULT_ERR;
@@ -140,4 +141,6 @@ result_t Communications_protocol_rf::parseBuffer(parse_t *p_parse, buffer_t *p_b
 _EXIT:
   return result;
 }
-#endif
+
+
+#endif  // defined(NRF52_ARCH) || defined(KEYSCANNER)

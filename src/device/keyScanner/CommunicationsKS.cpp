@@ -91,7 +91,7 @@ void Communications::run() {
     //TODO: be careful this is not going to break in the upgrade procedure.
     const constexpr uint32_t timeout_no_connection = 40000;
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
-    if (ms_since_enter -  KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
+    if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
       goToSleep();
     }
   }
@@ -157,17 +157,18 @@ void Communications::init()
      * p.data[2] LED effect id
      * p.data[3] take brightness handler?
      */
-/*    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
-    DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
-    DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
-    DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
-    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);*/
+//    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
+//    DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
+//    DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
+//    DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
+//    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
+
     if (p.data[3] == false) {
-      //DBG_PRINTF_TRACE("Calling onDismount");
-      LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
+//        DBG_PRINTF_TRACE("Calling onDismount");
+        LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
     } else {
-     // DBG_PRINTF_TRACE("Calling onMount");
-      LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
+//        DBG_PRINTF_TRACE("Calling onMount");
+        LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
     }
   });
 
@@ -212,9 +213,9 @@ void Communications::init()
     }
 
 //    if (layerIndex == 0) {
-//      for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
-//        DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
-//      }
+//        for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
+//            DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
+//        }
 //    }
   });
 
@@ -245,10 +246,10 @@ void Communications::init()
       swap = !swap;
     }
 
-//    if (layerIndex == 0){
-//      for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j){
-//        DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
-//      }
+//    if (layerIndex == 0) {
+//        for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j) {
+//            DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
+//        }
 //    }
   });
 
@@ -272,7 +273,6 @@ void Communications::init()
   WiredCommunication::init( &config );
   RFGWCommunication::init();
 }
-
 
 bool Communications::sendPacket(Packet packet) {
   if (WiredCommunication::connectionEstablished)

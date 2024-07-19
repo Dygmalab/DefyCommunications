@@ -1,10 +1,12 @@
-
 #ifndef _COMMUNICATIONS_H_
 #define _COMMUNICATIONS_H_
 
+
 #include "Communications_protocol.h"
 #include "Callback.h"
+
 using namespace Communications_protocol;
+
 
 class Communications {
  public:
@@ -18,5 +20,6 @@ class Communications {
 };
 
 extern Communications Communications;
+
 
 #endif  //_COMMUNICATIONS_H_

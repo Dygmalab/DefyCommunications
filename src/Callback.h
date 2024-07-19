@@ -1,10 +1,12 @@
 #ifndef _CALLBACK_H_
 #define _CALLBACK_H_
 
+
 #include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
+
 
 template<class... Arguments>
 class Callback {
@@ -68,4 +70,5 @@ class BindingCallbacks {
   std::vector<Join> callbacks;
 };
 
-#endif
+
+#endif  // _CALLBACK_H_
