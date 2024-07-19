@@ -10,7 +10,6 @@
 #include "RFGW_communications.h"
 #include "WiredCommunication.hpp"
 #include "BatteryManagement.hpp"
-#include "IS31FL3743B.hpp"
 #include "Keyscanner.hpp"
 
 constexpr uint8_t SIDE_ID = 25;
@@ -138,17 +137,17 @@ void Communications::init()
   });
 
   callbacks.bind(GET_SHORT_LED, [this](Packet p) {
-    DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
+/*    DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
     Packet packet{};
     packet.header.size = IS31FL3743B::get_short_leds(packet.data);
-    sendPacket(packet);
+    sendPacket(packet);*/
   });
 
   callbacks.bind(GET_OPEN_LED, [this](Packet p) {
-    DBG_PRINTF_TRACE("Received GET_OPEN_LED from %i ", p.header.device);
+/*    DBG_PRINTF_TRACE("Received GET_OPEN_LED from %i ", p.header.device);
     Packet packet{};
     packet.header.size = IS31FL3743B::get_open_leds(packet.data);
-    sendPacket(packet);
+    sendPacket(packet);*/
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
