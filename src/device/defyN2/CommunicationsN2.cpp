@@ -217,12 +217,19 @@ class WiredCommunications
     spiPort.clearSend();
   }
 
-  static void run()
-  {
+  static void portRun( uint8_t port ) {
+      SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
+
+      spiPort.run();
+  }
+
+  static void run() {
+
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
     static bool wasLeftConnected = false;
     auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
     if (isDefyLeftWired) {
+      portRun(1);
       readPacket(1);
     }
     if(wasLeftConnected && !isDefyLeftWired) {
@@ -233,6 +240,7 @@ class WiredCommunications
     static bool wasRightConnected = false;
     auto isDefyRightWired = keyScanner.rightSideWiredConnection();
     if (isDefyRightWired) {
+      portRun(2);
       readPacket(2);
     }
     if(wasRightConnected && !isDefyRightWired) {
