@@ -280,13 +280,13 @@ void Communications::init()
   });
 
   WiredCommunications::init();
-  RFGWCommunications::init();
+  //RFGWCommunications::init();
 }
 
 void Communications::run()
 {
   WiredCommunications::run();
-  RFGWCommunications::run();
+  //RFGWCommunications::run();
 }
 
 bool Communications::sendPacket(Packet packet)

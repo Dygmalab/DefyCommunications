@@ -13,7 +13,6 @@ class Communications {
   void init();
 
   void run();
-
   bool sendPacket(Packet data);
 
   BindingCallbacks<Commands, Packet> callbacks{};
