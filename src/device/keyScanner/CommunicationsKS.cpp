@@ -172,7 +172,7 @@ void Communications::init()
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::set_led_mode(p.data);
   });
 
@@ -180,13 +180,13 @@ void Communications::init()
   callbacks.bind(LED, empty_func);
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
-    DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
     uint8_t layerIndex = p.data[0];
-    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
+   // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
@@ -210,7 +210,7 @@ void Communications::init()
       }
       swap = !swap;
     }
-
+    LEDManagement::set_updated(true);
 //    if (layerIndex == 0) {
 //        for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
 //            DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
@@ -220,7 +220,7 @@ void Communications::init()
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
     uint8_t layerIndex = p.data[0];
-    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
+    //DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
@@ -244,7 +244,7 @@ void Communications::init()
       }
       swap = !swap;
     }
-
+      LEDManagement::set_updated(true);
 //    if (layerIndex == 0) {
 //        for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j) {
 //            DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
