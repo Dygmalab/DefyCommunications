@@ -30,6 +30,7 @@
 
 #define DEBUG_LOG_N2_COMMUNICATIONS     0
 
+#define PORT_IS_ALIVE_TIMEOUT_MS        2000
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -221,6 +222,52 @@ class WiredCommunications
     }
   }
 
+  static bool isPortAlive( uint8_t port )
+  {
+    uint32_t &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
+
+    /* Check if there was any communication at all */
+    if( lastCommunications == 0 )
+    {
+      return false;
+    }
+
+    /* Check how long it is since the last communication */
+    return ( (millis() - lastCommunications) < PORT_IS_ALIVE_TIMEOUT_MS ) ? true : false;
+  }
+
+  static bool isPortLeftAlive( void )
+  {
+    if( spiPort1Device == KEYSCANNER_DEFY_LEFT )
+    {
+      return isPortAlive( 1 );
+    }
+    else if( spiPort2Device == KEYSCANNER_DEFY_LEFT )
+    {
+      return isPortAlive( 2 );
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  static bool isPortRightAlive( void )
+  {
+    if( spiPort1Device == KEYSCANNER_DEFY_RIGHT )
+    {
+      return isPortAlive( 1 );
+    }
+    else if( spiPort2Device == KEYSCANNER_DEFY_RIGHT )
+    {
+      return isPortAlive( 2 );
+    }
+    else
+    {
+      return false;
+    }
+  }
+
   static void disconnect(uint8_t port)
   {
     SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
@@ -268,6 +315,8 @@ class WiredCommunications
     wasRightConnected = isDefyRightWired;
 
   }
+
+
 };
 
 #if COMPILE_RAISE2_KEYBOARD
@@ -306,6 +355,16 @@ void Communications::run()
 {
   WiredCommunications::run();
   RFGWCommunications::run();
+}
+
+bool Communications::isWiredLeftAlive()
+{
+  return WiredCommunications::isPortLeftAlive();
+}
+
+bool Communications::isWiredRightAlive()
+{
+  return WiredCommunications::isPortLeftAlive();
 }
 
 bool Communications::sendPacket(Packet packet)

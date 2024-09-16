@@ -33,6 +33,9 @@ class Communications {
 
   void run();
 
+  bool isWiredLeftAlive();
+  bool isWiredRightAlive();
+
   bool sendPacket(Packet data);
 
   BindingCallbacks<Commands, Packet> callbacks{};
