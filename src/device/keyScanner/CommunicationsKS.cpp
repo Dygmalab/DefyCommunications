@@ -52,7 +52,7 @@ void check_if_keyboard_is_wired_wireless(){
   static uint8_t counter = 0;
   static bool configuration_set = false;
 
-  if (WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished && !configuration_set){
+  if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set){
     //We are on a wired keyboard.
     const constexpr uint32_t timeout = 500;
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
@@ -75,7 +75,7 @@ void check_if_keyboard_is_wired_wireless(){
       }
     }
   }
-  else if (RFGWCommunication::connectionEstablished && !configuration_set)
+  else if (RFGateway::module_is_connected() && !configuration_set)
   {
     uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
     const constexpr uint32_t timeout = 2000;
