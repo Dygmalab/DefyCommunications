@@ -38,6 +38,8 @@ class Communications {
 
   bool sendPacket(Packet data);
 
+  void get_keyscanner_configuration(uint8_t side);
+
   BindingCallbacks<Commands, Packet> callbacks{};
 };
 
