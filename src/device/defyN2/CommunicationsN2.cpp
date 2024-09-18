@@ -320,13 +320,13 @@ class WiredCommunications
 };
 
 #if COMPILE_RAISE2_KEYBOARD
-static void get_keyscanner_configuration(uint8_t side){
+void Communications::get_keyscanner_configuration(uint8_t side){
   NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
   Communications_protocol::Packet p{};
   //p.header.device  = static_cast<Devices>(side);
   p.header.size = 1;
   p.header.command = Communications_protocol::CONFIGURATION;
-  Communications.sendPacket(p);
+  sendPacket(p);
 }
 #endif
 
@@ -342,9 +342,6 @@ void Communications::init()
 #endif
     sendPacket(p);
 
-#if COMPILE_RAISE2_KEYBOARD
-    get_keyscanner_configuration(p.header.device);
-#endif
   });
 
   WiredCommunications::init();
