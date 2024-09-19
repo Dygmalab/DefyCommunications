@@ -35,7 +35,7 @@ constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
-bool info_was_requested = false;
+
 
 void goToSleep() {
   LEDManagement::turnPowerOff();
