@@ -342,6 +342,9 @@ void Communications::init()
 #endif
     sendPacket(p);
 
+    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_LEFT);
+   get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
+
   });
 
   WiredCommunications::init();
