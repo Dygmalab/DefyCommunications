@@ -273,10 +273,7 @@ void Communications::init()
 
 #if COMPILE_RAISE2_KEYBOARD
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
-    if (!info_was_requested){
       KeyScanner.information_asked(true);
-      info_was_requested = true;
-    }
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
   });
 #endif
