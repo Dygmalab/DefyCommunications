@@ -342,8 +342,10 @@ void Communications::init()
 #endif
     sendPacket(p);
 
+#if COMPILE_RAISE2_KEYBOARD
     get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_LEFT);
-   get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
+    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
+#endif
 
   });
 
