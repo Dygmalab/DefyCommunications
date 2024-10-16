@@ -366,7 +366,7 @@ bool Communications::isWiredLeftAlive()
 
 bool Communications::isWiredRightAlive()
 {
-  return WiredCommunications::isPortLeftAlive();
+  return WiredCommunications::isPortRightAlive();
 }
 
 bool Communications::sendPacket(Packet packet)
