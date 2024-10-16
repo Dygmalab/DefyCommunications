@@ -40,6 +40,8 @@ class Communications {
 
   void get_keyscanner_configuration(uint8_t side);
 
+   void request_keyscanner_layers();
+
   BindingCallbacks<Commands, Packet> callbacks{};
 };
 

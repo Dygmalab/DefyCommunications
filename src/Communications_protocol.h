@@ -63,6 +63,7 @@ enum Commands : uint8_t {
   LAYER_UNDERGLOW_COLORS,
   GET_OPEN_LED,
   GET_SHORT_LED,
+  RETRY_LAYERS,
   //Battery
   BATTERY_LEVEL = 40,
   BATTERY_STATUS,
