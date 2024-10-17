@@ -230,8 +230,6 @@ void Communications::init()
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
 
-    LEDManagement::layer_config_received.ug_layer = true;
-
     uint8_t layerIndex = p.data[0];
     DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
@@ -257,6 +255,11 @@ void Communications::init()
       }
       swap = !swap;
     }
+
+      if (layerIndex == 9)
+      {
+          LEDManagement::layer_config_received.ug_layer = true;
+      }
   });
 
 #if COMPILE_RAISE2_KEYBOARD
