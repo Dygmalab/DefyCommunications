@@ -66,12 +66,6 @@ void check_if_keyboard_is_wired_wireless(){
         KeyScanner.specifications.conection = Pins::Device::Wired;
         counter = 0;
         configuration_set = true;
-        //debug message
-          /*DBG_PRINTF_TRACE("keyboard connection wired" );
-          DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
-          DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
-          DBG_PRINTF_TRACE("Chip id: ");
-          DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);*/
       }
     }
   }
@@ -170,17 +164,15 @@ void Communications::init()
   });
 
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
+
+    LEDManagement::layer_config_received.brightness = true;
+
+      DBG_PRINTF_TRACE("RECEIVED BRIGHTNESS from %i ", p.header.device);
     /* p.data[0] led driver brightness
      * p.data[1] underglow brightness
      * p.data[2] LED effect id
      * p.data[3] take brightness handler?
      */
-//    DBG_PRINTF_TRACE("Received BRIGHTNESS from %i ", p.header.device);
-//    DBG_PRINTF_TRACE("p.data[0] %i ", p.data[0]);
-//    DBG_PRINTF_TRACE("p.data[1] %i", p.data[1]);
-//    DBG_PRINTF_TRACE("p.data[2] %i", p.data[2]);
-//    DBG_PRINTF_TRACE("p.data[3] %i", p.data[3]);
-
     if (p.data[3] == false) {
 //        DBG_PRINTF_TRACE("Calling onDismount");
         LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
@@ -191,7 +183,8 @@ void Communications::init()
   });
 
   callbacks.bind(MODE_LED, [](Packet const &p) {
-    //DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
+    DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
+    LEDManagement::layer_config_received.led_mode = true;
     LEDManagement::set_led_mode(p.data);
   });
 
@@ -199,11 +192,15 @@ void Communications::init()
   callbacks.bind(LED, empty_func);
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
-    //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
+    DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
+
+      DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
+    LEDManagement::layer_config_received.bl_layer = true;
+
     uint8_t layerIndex = p.data[0];
    // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
@@ -229,17 +226,12 @@ void Communications::init()
       }
       swap = !swap;
     }
-    LEDManagement::set_updated(true);
-//    if (layerIndex == 0) {
-//        for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j){
-//            DBG_PRINTF_TRACE("%i ",layer.keyMap_leds[j]);
-//        }
-//    }
   });
 
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
+
     uint8_t layerIndex = p.data[0];
-    //DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
+    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
@@ -263,12 +255,11 @@ void Communications::init()
       }
       swap = !swap;
     }
-      LEDManagement::set_updated(true);
-//    if (layerIndex == 0) {
-//        for (uint8_t j = 0; j < sizeof(layer.underGlow_leds); ++j) {
-//            DBG_PRINTF_TRACE("%i ",layer.underGlow_leds[j]);
-//        }
-//    }
+
+      if (layerIndex == 9)
+      {
+          LEDManagement::layer_config_received.ug_layer = true;
+      }
   });
 
 #if COMPILE_RAISE2_KEYBOARD
@@ -296,4 +287,12 @@ bool Communications::sendPacket(Packet packet) {
     return RFGWCommunication::sendPacket(packet);
   return false;
 }
+
+void Communications::request_keyscanner_layers()
+{
+    Communications_protocol::Packet p{};
+    p.header.command = Communications_protocol::RETRY_LAYERS;
+    sendPacket(p);
+}
+
 #endif
