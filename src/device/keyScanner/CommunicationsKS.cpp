@@ -47,7 +47,6 @@ void goToSleep() {
   BatteryManagement::goToSleep();
 }
 
-#if COMPILE_RAISE2_KEYBOARD
 void check_if_keyboard_is_wired_wireless(){
   static uint8_t counter = 0;
   static bool configuration_set = false;
@@ -94,7 +93,6 @@ void check_if_keyboard_is_wired_wireless(){
       KeyScanner.information_asked(false);
   }
 }
-#endif  // #if COMPILE_RAISE2_KEYBOARD
 
 void Communications::run() {
   WiredCommunication::run();
@@ -108,9 +106,7 @@ void Communications::run() {
     }
   }
 
-#if COMPILE_RAISE2_KEYBOARD
   check_if_keyboard_is_wired_wireless();
-#endif
 }
 
 void Communications::init()
@@ -262,12 +258,12 @@ void Communications::init()
       }
   });
 
-#if COMPILE_RAISE2_KEYBOARD
+
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
       KeyScanner.information_asked(true);
     DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
   });
-#endif
+
 
   //Battery
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
