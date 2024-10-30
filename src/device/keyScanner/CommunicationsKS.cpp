@@ -199,7 +199,6 @@ void Communications::init()
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
 
       DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
-    LEDManagement::layer_config_received.bl_layer = true;
 
     uint8_t layerIndex = p.data[0];
    // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
@@ -225,6 +224,11 @@ void Communications::init()
         layer.keyMap_leds[j] = message[k++].secondColor;
       }
       swap = !swap;
+    }
+
+    if (layerIndex == 9)
+    {
+        LEDManagement::layer_config_received.bl_layer = true;
     }
   });
 
