@@ -115,7 +115,7 @@ class RFGWCommunications {
 
       bool empty()
       {
-          return read_pos == write_pos;
+          return ( packet_count == 0 ) ? true : false;
       }
 
       bool full()
@@ -130,20 +130,18 @@ class RFGWCommunications {
               return;
           }
 
+          packet_count--;
           read_pos++;
           if( read_pos >= PACKET_QUEUE_SIZE )
           {
               read_pos = 0;
           }
-
-          packet_count--;
       }
 
       void emplace( Packet &packet )
       {
           if( full() == true )
           {
-              volatile bool stop_here = true;
               return;
           }
 
