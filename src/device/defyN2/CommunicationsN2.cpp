@@ -97,6 +97,73 @@ class RFGWCommunications {
     right.run();
   }
 
+  struct PacketQueue {
+      explicit PacketQueue(){}
+
+#define PACKET_QUEUE_SIZE       128
+
+      Communications_protocol_rf::WrapperPacket packets[PACKET_QUEUE_SIZE];
+
+      uint16_t read_pos = 0;
+      uint16_t write_pos = 0;
+      uint16_t packet_count = 0;
+
+      uint16_t size()
+      {
+          return packet_count;
+      }
+
+      bool empty()
+      {
+          return read_pos == write_pos;
+      }
+
+      bool full()
+      {
+          return ( packet_count >= (PACKET_QUEUE_SIZE - 1) ) ? true : false;
+      }
+
+      void pop()
+      {
+          if( empty() == true )
+          {
+              return;
+          }
+
+          read_pos++;
+          if( read_pos >= PACKET_QUEUE_SIZE )
+          {
+              read_pos = 0;
+          }
+
+          packet_count--;
+      }
+
+      void emplace( Packet &packet )
+      {
+          if( full() == true )
+          {
+              volatile bool stop_here = true;
+              return;
+          }
+
+          packets[write_pos].packet = packet;
+
+          write_pos++;
+          if( write_pos >= PACKET_QUEUE_SIZE )
+          {
+              write_pos = 0;
+          }
+
+          packet_count++;
+      }
+
+      Communications_protocol_rf::WrapperPacket& front()
+      {
+          return packets[read_pos];
+      }
+  };
+
   struct Side {
     explicit Side(rfgw_pipe_id_t pipe)
       : pipe_id(pipe) {}
@@ -184,7 +251,7 @@ class RFGWCommunications {
 
     bool connected = false;
     rfgw_pipe_id_t pipe_id;
-    std::queue<Communications_protocol_rf::WrapperPacket> tx_messages;
+    PacketQueue tx_messages;
     void sendPacket(Packet &packet) {
       if (!kaleidoscope::plugin::RadioManager::isInited()) return;
       packet.header.crc    = 0;
