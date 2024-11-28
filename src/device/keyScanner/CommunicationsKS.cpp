@@ -178,11 +178,21 @@ void Communications::init()
     }
   });
 
-  callbacks.bind(MODE_LED, [](Packet const &p)
+  callbacks.bind(MODE_LED, [this](Packet const &p)
   {
     DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::layer_config_received.led_mode = true;
-    LEDManagement::set_led_mode(p.data);
+    //If we have received the configuration, we can set the LED mode.
+    //If not, we will reset the flag. And we will wait for the next configuration.
+    if (LEDManagement::config_received())
+    {
+       LEDManagement::set_led_mode(p.data);
+    }
+    else
+    {
+        LEDManagement::layer_config_received.led_mode = false;
+        request_keyscanner_layers();
+    }
   });
 
   //TODO: SET_LED
