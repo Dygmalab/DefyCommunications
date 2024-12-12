@@ -176,9 +176,6 @@ void Communications::init() {
     p.header.device  = p.header.device;
     p.header.command = CONNECTED;
     sendPacket(p);
-
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_LEFT);
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
   });
 
   WiredCommunications::init();
