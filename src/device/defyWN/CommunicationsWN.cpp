@@ -160,15 +160,6 @@ class WiredCommunications {
   }
 };
 
-void Communications::get_keyscanner_configuration(uint8_t side) {
-
-  Communications_protocol::Packet p{};
-  //p.header.device  = static_cast<Devices>(side);
-  p.header.size    = 1;
-  p.header.command = Communications_protocol::CONFIGURATION;
-  sendPacket(p);
-}
-
 void Communications::init() {
 
   callbacks.bind(CONNECTED, [this](Packet p) {
