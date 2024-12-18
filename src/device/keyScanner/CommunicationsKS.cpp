@@ -178,18 +178,31 @@ void Communications::init()
     }
   });
 
-  callbacks.bind(MODE_LED, [](Packet const &p) {
+  callbacks.bind(MODE_LED, [this](Packet const &p)
+  {
     DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::layer_config_received.led_mode = true;
-    LEDManagement::set_led_mode(p.data);
+    //If we have received the configuration, we can set the LED mode.
+    //If not, we will reset the flag. And we will wait for the next configuration.
+    if (LEDManagement::config_received())
+    {
+       LEDManagement::set_led_mode(p.data);
+    }
+    else
+    {
+        LEDManagement::layer_config_received.led_mode = false;
+        request_keyscanner_layers();
+    }
   });
 
   //TODO: SET_LED
   callbacks.bind(LED, empty_func);
 
-  callbacks.bind(PALETTE_COLORS, [](Packet const &p) {
+  callbacks.bind(PALETTE_COLORS, [](Packet const &p)
+  {
     DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
+    LEDManagement::layer_config_received.palette = true;
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
