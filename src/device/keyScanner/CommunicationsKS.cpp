@@ -111,7 +111,7 @@ void Communications::run() {
 
 void Communications::init()
 {
-  if (gpio_get(SIDE_ID)) {
+  if (KsConfig::get_side() == KsConfig::Side::RIGHT) {
     device = Communications_protocol::KEYSCANNER_DEFY_RIGHT;
   } else {
     device = Communications_protocol::KEYSCANNER_DEFY_LEFT;
