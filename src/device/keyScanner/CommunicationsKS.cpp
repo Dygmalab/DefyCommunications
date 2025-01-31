@@ -200,14 +200,14 @@ void Communications::init()
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p)
   {
-    DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
     LEDManagement::layer_config_received.palette = true;
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
 
-      DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
+     // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
 
     uint8_t layerIndex = p.data[0];
    // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
@@ -244,7 +244,7 @@ void Communications::init()
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
 
     uint8_t layerIndex = p.data[0];
-    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
+   // DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
