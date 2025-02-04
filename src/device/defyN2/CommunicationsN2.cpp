@@ -377,10 +377,9 @@ class WiredCommunications
 };
 
 
-void Communications::get_keyscanner_configuration(uint8_t side){
-  NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
+void Communications::get_keyscanner_configuration(){
+  NRF_LOG_DEBUG("Sending configuration command to KS (broadcast)");
   Communications_protocol::Packet p{};
-  //p.header.device  = static_cast<Devices>(side);
   p.header.size = 1;
   p.header.command = Communications_protocol::CONFIGURATION;
   sendPacket(p);
@@ -399,10 +398,7 @@ void Communications::init()
 #endif
     sendPacket(p);
 
-
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_LEFT);
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
-
+    get_keyscanner_configuration();
 
   });
 

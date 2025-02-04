@@ -38,7 +38,7 @@ class Communications {
 
   bool sendPacket(Packet data);
 
-  void get_keyscanner_configuration(uint8_t side);
+  void get_keyscanner_configuration();
 
    void request_keyscanner_layers();
 
