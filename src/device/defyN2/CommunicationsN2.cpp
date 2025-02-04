@@ -80,13 +80,10 @@ class RFGWCommunications {
     rfgw_cb_pipe_connection_set(cbPipeConnection);
 
     Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
-      if (p.header.device == RF_DEFY_LEFT || p.header.device == RF_DEFY_RIGHT) {
         p.header.size    = 0;
         p.header.device  = p.header.device;
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
-      }
-
     });
   }
 
