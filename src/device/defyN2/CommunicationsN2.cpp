@@ -68,11 +68,6 @@ class RFGWCommunications {
 #if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Connected RF %lu", pipeId);
 #endif
-
-    Packet packet{};
-    packet.header.command = Communications_protocol::CONNECTED;
-    packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT : RF_DEFY_LEFT;
-    Communications.callbacks.call(packet.header.command, packet);
   };
 
   static void init() {
