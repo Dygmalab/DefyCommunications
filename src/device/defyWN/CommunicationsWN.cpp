@@ -64,6 +64,13 @@ class WiredCommunications {
   {
     spiPort1.init();
     spiPort2.init();
+
+    Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
+        p.header.size    = 0;
+        p.header.device  = p.header.device;
+        p.header.command = IS_ALIVE;
+        Communications.sendPacket(p);
+    });
   }
 
   static void readPacket(uint8_t port) 
