@@ -26,11 +26,14 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
+#include <Kaleidoscope-LEDControl.h>
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS     0
 
 #define PORT_IS_ALIVE_TIMEOUT_MS        2000
+
+#define HOST_CONNECTION_CHECK_INTERVAL  300
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -427,6 +430,7 @@ void Communications::init()
     callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
     {
         //Keyscanner will ask for the host connection.
+         NRF_LOG_INFO("HOST CONNECTION ASKED");
         host_connection_requested = true;
     });
 
@@ -441,37 +445,27 @@ void Communications::init()
  */
 bool check_usb_connection()
 {
-    static bool usb_connected = false;
-
-    if (tud_ready() != usb_connected)
-    {
-        usb_connected = tud_ready();
-        if (usb_connected)
-        {
-            // If we have a USB connection, we need to send the connected message to the KS.
-            // This will load the layers.
-            NRF_LOG_INFO("USB connected");
-        }
-        else
-        {
-            // If we lose USB connection, we need to send the disconnected message to the KS.
-            NRF_LOG_INFO("USB not connected");
-        }
-    }
-    return usb_connected;
+    return  tud_ready();
 }
 
 void check_host_connection()
 {
     static bool host_connected = false;
     static bool prev_host_connected = true;
+    static uint32_t last_host_connection_check = 0;
 
     switch(host_connection_status)
     {
         case HostConnectionStatus::CHECK_CONNECTION:
         {
-            // host_connection_requested will be true if the KS has requested the host connection.
+            //Small debouncer for the connection check.
+            if (millis() - last_host_connection_check < HOST_CONNECTION_CHECK_INTERVAL)
+            {
+                return;
+            }
+            last_host_connection_check = millis();
 
+            // host_connection_requested will be true if the KS has requested the host connection.
             if (!ble_connected() && !check_usb_connection() )
             {
                 host_connected = false;
@@ -498,13 +492,16 @@ void check_host_connection()
             else
             {
                 NRF_LOG_INFO("Host CONNECTED");
+                ::LEDControl.set_mode(::LEDControl.get_mode_index());
             }
             //Send the connected message to the KS.
             NRF_LOG_INFO("Sending Status");
             Communications_protocol::Packet packet{};
             packet.header.command = Communications_protocol::HOST_CONNECTION;
-            packet.header.size    = 1;
+            packet.header.size    = 2;
             packet.data[0]        = host_connected;
+            packet.data[1]        = ble_innited();
+
             Communications.sendPacket(packet);
 
             prev_host_connected = host_connected;
