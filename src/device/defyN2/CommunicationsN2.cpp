@@ -40,6 +40,17 @@ static SpiPort spiPort2(2);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
 
+static bool host_connection_requested = false;
+enum class HostConnectionStatus
+{
+    HOST_CONNECTED,
+    HOST_DISCONNECTED,
+    CONN_MSG_RECEIVED,
+    DISCONN_MSG_RECEIVED,
+    CHECK_CONNECTION,
+    WAIT_RESPONSE
+} host_connection_status;
+
 void checkActive();
 
 class RFGWCommunications {
@@ -86,7 +97,6 @@ class RFGWCommunications {
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
       }
-
     });
   }
 
@@ -386,7 +396,7 @@ class WiredCommunications
 
 
 void Communications::get_keyscanner_configuration(uint8_t side){
-  NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
+  //NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
   Communications_protocol::Packet p{};
   //p.header.device  = static_cast<Devices>(side);
   p.header.size = 1;
@@ -414,14 +424,106 @@ void Communications::init()
 
   });
 
+    callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
+    {
+        //Keyscanner will ask for the host connection.
+        host_connection_requested = true;
+    });
+
   WiredCommunications::init();
   RFGWCommunications::init();
+}
+
+/*
+ * This function is called when the USB is connected or disconnected.
+ * For the moment it only logs the event.
+ * We will use it to decide if we send the disconnect message to the host. Or not.
+ */
+bool check_usb_connection()
+{
+    static bool usb_connected = false;
+
+    if (tud_ready() != usb_connected)
+    {
+        usb_connected = tud_ready();
+        if (usb_connected)
+        {
+            // If we have a USB connection, we need to send the connected message to the KS.
+            // This will load the layers.
+            NRF_LOG_INFO("USB connected");
+        }
+        else
+        {
+            // If we lose USB connection, we need to send the disconnected message to the KS.
+            NRF_LOG_INFO("USB not connected");
+        }
+    }
+    return usb_connected;
+}
+
+void check_host_connection()
+{
+    static bool host_connected = false;
+    static bool prev_host_connected = true;
+
+    switch(host_connection_status)
+    {
+        case HostConnectionStatus::CHECK_CONNECTION:
+        {
+            // host_connection_requested will be true if the KS has requested the host connection.
+
+            if (!ble_connected() && !check_usb_connection() )
+            {
+                host_connected = false;
+            }
+            else
+            {
+                host_connected = true;
+            }
+
+            if(prev_host_connected != host_connected || host_connection_requested == true)
+            {
+                NRF_LOG_INFO("Host connection changed or requested");
+                host_connection_status = HostConnectionStatus::HOST_CONNECTED;
+            }
+        }
+        break;
+
+        case HostConnectionStatus::HOST_CONNECTED:
+        {
+            if (host_connected == false)
+            {
+                NRF_LOG_INFO("Host DISCONNECTED");
+            }
+            else
+            {
+                NRF_LOG_INFO("Host CONNECTED");
+            }
+            //Send the connected message to the KS.
+            NRF_LOG_INFO("Sending Status");
+            Communications_protocol::Packet packet{};
+            packet.header.command = Communications_protocol::HOST_CONNECTION;
+            packet.header.size    = 1;
+            packet.data[0]        = host_connected;
+            Communications.sendPacket(packet);
+
+            prev_host_connected = host_connected;
+            host_connection_requested = false;
+
+            host_connection_status = HostConnectionStatus::CHECK_CONNECTION;
+        }
+        break;
+
+        default:
+        break;
+    }
 }
 
 void Communications::run()
 {
   WiredCommunications::run();
   RFGWCommunications::run();
+  check_host_connection();
 }
 
 bool Communications::isWiredLeftAlive()
