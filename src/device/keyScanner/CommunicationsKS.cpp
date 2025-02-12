@@ -192,6 +192,7 @@ void Communications::init()
   {
     //DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::layer_config_received.led_mode = true;
+      DBG_PRINTF_TRACE("Receive MODE_LED from %i ", p.header.device);
     //If we have received the configuration, we can set the LED mode.
     //If not, we will reset the flag. And we will wait for the next configuration.
     if (LEDManagement::config_received())
@@ -307,6 +308,14 @@ void Communications::init()
     }
   });
 
+  callbacks.bind(CONNECTED, [this](Packet const &p)
+  {
+    DBG_PRINTF_TRACE("Received CONNECTED from %i sending HOST_STATUS", p.header.device);
+      Packet host_status_packet{};
+      host_status_packet.header.command = HOST_CONNECTION_STATUS;
+      host_status_packet.header.size = 1;
+      sendPacket(host_status_packet);
+  });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
       KeyScanner.information_asked(true);
