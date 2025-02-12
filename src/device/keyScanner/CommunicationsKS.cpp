@@ -100,6 +100,11 @@ void check_if_keyboard_is_wired_wireless(){
   if (configuration_set && KeyScanner.get_information_asked()){
       KeyScanner.send_configuration_package();
       KeyScanner.information_asked(false);
+
+      Packet host_status_packet{};
+      host_status_packet.header.command = HOST_CONNECTION_STATUS;
+      host_status_packet.header.size = 1;
+      Communications.sendPacket(host_status_packet);
   }
 }
 
