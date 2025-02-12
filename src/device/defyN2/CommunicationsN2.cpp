@@ -82,11 +82,6 @@ class RFGWCommunications {
 #if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Connected RF %lu", pipeId);
 #endif
-
-    Packet packet{};
-    packet.header.command = Communications_protocol::CONNECTED;
-    packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT : RF_DEFY_LEFT;
-    Communications.callbacks.call(packet.header.command, packet);
   };
 
   static void init() {
@@ -94,12 +89,10 @@ class RFGWCommunications {
     rfgw_cb_pipe_connection_set(cbPipeConnection);
 
     Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
-      if (p.header.device == RF_DEFY_LEFT || p.header.device == RF_DEFY_RIGHT) {
         p.header.size    = 0;
         p.header.device  = p.header.device;
         p.header.command = IS_ALIVE;
         Communications.sendPacket(p);
-      }
     });
   }
 
@@ -398,10 +391,9 @@ class WiredCommunications
 };
 
 
-void Communications::get_keyscanner_configuration(uint8_t side){
-  //NRF_LOG_DEBUG("Sending configuration command to KS %i",side);
+void Communications::get_keyscanner_configuration(){
+  NRF_LOG_DEBUG("Sending configuration command to KS (broadcast)");
   Communications_protocol::Packet p{};
-  //p.header.device  = static_cast<Devices>(side);
   p.header.size = 1;
   p.header.command = Communications_protocol::CONFIGURATION;
   sendPacket(p);
@@ -420,12 +412,7 @@ void Communications::init()
 #endif
     sendPacket(p);
 
-
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_LEFT);
-    get_keyscanner_configuration(Devices::KEYSCANNER_DEFY_RIGHT);
-
-
-  });
+    get_keyscanner_configuration();
 
     callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
     {
@@ -433,6 +420,13 @@ void Communications::init()
          NRF_LOG_INFO("HOST CONNECTION ASKED");
         host_connection_requested = true;
     });
+
+    callbacks.bind(MODE_LED, [this](Packet p)
+    {
+            NRF_LOG_INFO("MODE LED ASKED");
+            ::LEDControl.set_mode(::LEDControl.get_mode_index());
+    });
+});
 
   WiredCommunications::init();
   RFGWCommunications::init();
