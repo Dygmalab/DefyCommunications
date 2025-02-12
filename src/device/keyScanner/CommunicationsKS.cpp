@@ -289,13 +289,18 @@ void Communications::init()
       }
   });
 
-  callbacks.bind(HOST_CONNECTION, [](Packet const &p)
+  callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
   {
     DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
     if (p.data[0] == 1)
     {
         DBG_PRINTF_TRACE("HOST CONNECTED ");
         host_connected = Host_status::CONNECTED;
+
+        Packet mode_led_packet{};
+        mode_led_packet.header.command = Communications_protocol::MODE_LED;
+        mode_led_packet.header.size = 1;
+        sendPacket(mode_led_packet);
     }
     else
     {
@@ -308,14 +313,14 @@ void Communications::init()
     }
   });
 
-  callbacks.bind(CONNECTED, [this](Packet const &p)
+/*  callbacks.bind(CONNECTED, [this](Packet const &p)
   {
     DBG_PRINTF_TRACE("Received CONNECTED from %i sending HOST_STATUS", p.header.device);
       Packet host_status_packet{};
       host_status_packet.header.command = HOST_CONNECTION_STATUS;
       host_status_packet.header.size = 1;
       sendPacket(host_status_packet);
-  });
+  });*/
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
       KeyScanner.information_asked(true);
