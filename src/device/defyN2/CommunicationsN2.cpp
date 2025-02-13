@@ -26,11 +26,14 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
+#include <Kaleidoscope-LEDControl.h>
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS     0
 
 #define PORT_IS_ALIVE_TIMEOUT_MS        2000
+
+#define HOST_CONNECTION_CHECK_INTERVAL  300
 
 static SpiPort spiPort1(1);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -39,6 +42,17 @@ static uint32_t spiPort1LastCommunication{0};
 static SpiPort spiPort2(2);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
+
+static bool host_connection_requested = false;
+enum class HostConnectionStatus
+{
+    HOST_CONNECTED,
+    HOST_DISCONNECTED,
+    CONN_MSG_RECEIVED,
+    DISCONN_MSG_RECEIVED,
+    CHECK_CONNECTION,
+    WAIT_RESPONSE
+} host_connection_status;
 
 void checkActive();
 
@@ -400,16 +414,107 @@ void Communications::init()
 
     get_keyscanner_configuration();
 
-  });
+    callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
+    {
+        //Keyscanner will ask for the host connection.
+         NRF_LOG_INFO("HOST CONNECTION ASKED");
+        host_connection_requested = true;
+    });
+
+    callbacks.bind(MODE_LED, [this](Packet p)
+    {
+            NRF_LOG_INFO("MODE LED ASKED");
+            ::LEDControl.set_mode(::LEDControl.get_mode_index());
+    });
+});
 
   WiredCommunications::init();
   RFGWCommunications::init();
+}
+
+/*
+ * This function is called when the USB is connected or disconnected.
+ * For the moment it only logs the event.
+ * We will use it to decide if we send the disconnect message to the host. Or not.
+ */
+bool check_usb_connection()
+{
+    return  tud_ready();
+}
+
+void check_host_connection()
+{
+    static bool host_connected = false;
+    static bool prev_host_connected = true;
+    static uint32_t last_host_connection_check = 0;
+
+    switch(host_connection_status)
+    {
+        case HostConnectionStatus::CHECK_CONNECTION:
+        {
+            //Small debouncer for the connection check.
+            if (millis() - last_host_connection_check < HOST_CONNECTION_CHECK_INTERVAL)
+            {
+                return;
+            }
+            last_host_connection_check = millis();
+
+            // host_connection_requested will be true if the KS has requested the host connection.
+            if (!ble_connected() && !check_usb_connection() )
+            {
+                host_connected = false;
+            }
+            else
+            {
+                host_connected = true;
+            }
+
+            if(prev_host_connected != host_connected || host_connection_requested == true)
+            {
+                NRF_LOG_INFO("Host connection changed or requested");
+                host_connection_status = HostConnectionStatus::HOST_CONNECTED;
+            }
+        }
+        break;
+
+        case HostConnectionStatus::HOST_CONNECTED:
+        {
+            if (host_connected == false)
+            {
+                NRF_LOG_INFO("Host DISCONNECTED");
+            }
+            else
+            {
+                NRF_LOG_INFO("Host CONNECTED");
+                ::LEDControl.set_mode(::LEDControl.get_mode_index());
+            }
+            //Send the connected message to the KS.
+            NRF_LOG_INFO("Sending Status");
+            Communications_protocol::Packet packet{};
+            packet.header.command = Communications_protocol::HOST_CONNECTION;
+            packet.header.size    = 2;
+            packet.data[0]        = host_connected;
+            packet.data[1]        = ble_innited();
+
+            Communications.sendPacket(packet);
+
+            prev_host_connected = host_connected;
+            host_connection_requested = false;
+
+            host_connection_status = HostConnectionStatus::CHECK_CONNECTION;
+        }
+        break;
+
+        default:
+        break;
+    }
 }
 
 void Communications::run()
 {
   WiredCommunications::run();
   RFGWCommunications::run();
+  check_host_connection();
 }
 
 bool Communications::isWiredLeftAlive()
