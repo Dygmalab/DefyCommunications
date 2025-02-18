@@ -19,12 +19,9 @@
 
 #ifdef KEYSCANNER
 #include "Communications.h"
-#include "hardware/gpio.h"
-#include "pico/stdlib.h"
 #include "debug_print.h"
-#include "SPI.hpp"
-#include "CRC.h"
-#include "pico/util/queue.h"
+
+
 #include "LEDManagement.hpp"
 #include "RFGW_communications.h"
 #include "WiredCommunication.hpp"
