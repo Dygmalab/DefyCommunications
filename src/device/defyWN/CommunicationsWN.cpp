@@ -21,12 +21,18 @@
 
 #include "Communications.h"
 #include "SpiPort.h"
+#include "kaleidoscope/plugin/LEDControl.h"
 #include <kaleidoscope.h>
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS 0
 
 #define PORT_IS_ALIVE_TIMEOUT_MS    2000
+
+#define HOST_CONNECTION_CHECK_INTERVAL  250
+
+#define USB_CONNECTION_MARGIN          100
+
 
 static SpiPort spiPort1(0);
 static Devices spiPort1Device{Communications_protocol::UNKNOWN};
@@ -36,9 +42,21 @@ static SpiPort spiPort2(1);
 static Devices spiPort2Device{Communications_protocol::UNKNOWN};
 static uint32_t spiPort2LastCommunication{0};
 
-/****************************************************************** */
+static bool host_connection_requested = false;
 
-constexpr static uint32_t timeout = 600;
+enum class Connection_status
+{
+    SET_USB_TIMER,
+    CHECK_USB_CONN,
+    CHECK_WIRED_OR_WIRELESS,
+    HOST_CONNECTED,
+}conn_state = Connection_status::SET_USB_TIMER;
+
+bool mode_led_requested = false;
+
+void connection_state_machine ();
+
+/****************************************************************** */
 
 struct SideInfo {
   SideInfo(Devices _devices)
@@ -176,12 +194,23 @@ void Communications::init() {
     sendPacket(p);
   });
 
+  callbacks.bind(HOST_CONNECTION_STATUS, [](Packet p) {
+        //Keyscanner asked for the host connection.
+        host_connection_requested = true;
+  });
+
+  callbacks.bind(MODE_LED, [](Packet p) {
+        //Mode LED requested from KS.
+        mode_led_requested = true;
+  });
+
   WiredCommunications::init();
 }
 
 void Communications::run() {
 
   WiredCommunications::run();
+  connection_state_machine();
 }
 
 bool Communications::sendPacket(Packet packet) {
@@ -220,6 +249,110 @@ bool Communications::isWiredLeftAlive() {
 
 bool Communications::isWiredRightAlive() {
   return WiredCommunications::isPortRightAlive();
+}
+
+/*
+ * This function is called when the USB is connected or disconnected.
+ * For the moment it only logs the event.
+ * We will use it to decide if we send the disconnect message to the host. Or not.
+ */
+bool check_usb_connection()
+{
+    return  tud_ready();
+}
+
+static void send_host_connection(bool connected)
+{
+    Communications_protocol::Packet packet{};
+    packet.header.command = Communications_protocol::HOST_CONNECTION;
+    packet.header.size    = 2;
+    packet.data[0]        = connected;
+    Communications.sendPacket(packet);
+    //**************************************
+}
+
+void connection_state_machine ()
+{
+    //HOST CONNECTION
+    static bool host_connected = false;
+    static bool prev_host_connected = true;
+    static uint32_t last_host_connection_check = 0;
+
+    switch (conn_state)
+    {
+        case Connection_status::SET_USB_TIMER:
+        {
+            last_host_connection_check = millis();
+            conn_state = Connection_status::CHECK_USB_CONN;
+        }
+        break;
+
+        case Connection_status::CHECK_USB_CONN:
+        {
+            //Small debounce for the connection check.
+            if (millis() - last_host_connection_check < HOST_CONNECTION_CHECK_INTERVAL)
+            {
+                return;
+            }
+            last_host_connection_check = millis();
+
+            if (!check_usb_connection())
+            {
+                host_connected = false;
+            }
+            else
+            {
+                host_connected = true;
+            }
+
+            if(mode_led_requested && host_connected)
+            {
+                mode_led_requested = false;
+                ::LEDControl.set_mode(::LEDControl.get_mode_index()); //Send the mode to the KS.
+            }
+            else if(mode_led_requested && !host_connected)
+            {
+                //Mode LED asked but the host is not connected.
+                mode_led_requested = false;
+            }
+
+            // host_connection_requested will be true if the KS has requested the host connection.
+            if(prev_host_connected != host_connected || host_connection_requested)
+            {
+                //Host connection changed or the KS has requested the host connection.
+                // This will override the previous state.
+                conn_state = Connection_status::HOST_CONNECTED;
+            }
+
+        }
+        break;
+
+        case Connection_status::HOST_CONNECTED:
+        {
+            if (!host_connected)
+            {
+                last_host_connection_check = millis();
+            }
+            else
+            {
+                ::LEDControl.set_mode(::LEDControl.get_mode_index());
+            }
+
+            //Send the connected message to the KS
+            send_host_connection(host_connected);
+
+            prev_host_connected = host_connected;
+            host_connection_requested = false;
+
+            conn_state = Connection_status::CHECK_USB_CONN;
+        }
+        break;
+
+        default:
+        break;
+
+
+    }
 }
 
 class Communications Communications;
