@@ -71,6 +71,8 @@ class RFGWCommunications {
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = true;
 
+    new_connection_handle();
+
 #if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Connected RF %lu", pipeId);
 #endif
