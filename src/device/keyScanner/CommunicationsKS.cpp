@@ -27,8 +27,8 @@
 #include "WiredCommunication.hpp"
 #include "BatteryManagement.hpp"
 #include "Keyscanner.hpp"
+#include "hal_mcu_systim.h"
 
-constexpr uint8_t SIDE_ID = 25;
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
@@ -51,7 +51,7 @@ void check_if_keyboard_is_wired_wireless(){
   if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set){
     //We are on a wired keyboard.
     const constexpr uint32_t timeout = 500;
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
     static uint32_t last_time                       = ms_since_enter;
 
     if (ms_since_enter - last_time >= timeout) {
@@ -67,7 +67,7 @@ void check_if_keyboard_is_wired_wireless(){
   }
   else if (RFGateway::module_is_connected() && !configuration_set)
   {
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
     const constexpr uint32_t timeout = 2000;
     static uint32_t last_time                       = ms_since_enter;
 
@@ -97,7 +97,7 @@ void Communications::run() {
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
     //TODO: be careful this is not going to break in the upgrade procedure.
     const constexpr uint32_t timeout_no_connection = 40000;
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
     if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
       goToSleep();
     }
