@@ -26,7 +26,8 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
-#include <Kaleidoscope-LEDControl.h>
+#include "Kaleidoscope-IdleLEDsDefy.h"
+#include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
@@ -78,6 +79,11 @@ bool mode_led_requested = false;
 
 void checkActive();
 
+void new_connection_handle(void)
+{
+    IdleLEDsDefy.new_connection_set();
+}
+
 class RFGWCommunications {
  public:
   static void cbPipeDisconnection(rfgw_pipe_id_t pipeId) {
@@ -100,6 +106,8 @@ class RFGWCommunications {
   static void cbPipeConnection(rfgw_pipe_id_t pipeId) {
     RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
     side.connected                 = true;
+
+    new_connection_handle();
 
 #if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_DEBUG("Connected RF %lu", pipeId);
@@ -382,13 +390,25 @@ class WiredCommunications
       spiPort.run();
   }
 
+  static bool portIsConnected( uint8_t port ) {
+      SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
+
+      return spiPort.is_connected();
+  }
+
   static void run() {
 
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
+    /**********************/
+    /*     Left side      */
+    /**********************/
     static bool wasLeftConnected = false;
-    auto isDefyLeftWired   = keyScanner.leftSideWiredConnection();
+    auto isDefyLeftWired   = portIsConnected(1);
+
+    if(!wasLeftConnected && isDefyLeftWired) {
+      new_connection_handle();
+    }
+    portRun(1);
     if (isDefyLeftWired) {
-      portRun(1);
       readPacket(1);
     }
     if(wasLeftConnected && !isDefyLeftWired) {
@@ -396,10 +416,17 @@ class WiredCommunications
     }
     wasLeftConnected = isDefyLeftWired;
 
+    /**********************/
+    /*     Right side     */
+    /**********************/
     static bool wasRightConnected = false;
-    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    auto isDefyRightWired = portIsConnected(2);
+
+    if(!wasRightConnected && isDefyRightWired) {
+      new_connection_handle();
+    }
+    portRun(2);
     if (isDefyRightWired) {
-      portRun(2);
       readPacket(2);
     }
     if(wasRightConnected && !isDefyRightWired) {
