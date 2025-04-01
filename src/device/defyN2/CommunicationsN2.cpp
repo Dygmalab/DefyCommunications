@@ -77,6 +77,9 @@ enum class Connection_status
 
 bool mode_led_requested = false;
 
+//HOST CONNECTION STATUS
+static bool host_connected = false;
+
 void checkActive();
 
 void new_connection_handle(void)
@@ -491,6 +494,11 @@ bool check_usb_connection()
     return  tud_ready();
 }
 
+bool Communications::is_host_connected()
+{
+    return host_connected;
+}
+
 void connection_state_machine ()
 {
     //BLE STATUS
@@ -499,9 +507,10 @@ void connection_state_machine ()
     volatile uint32_t usbConnectionTime = 0;
 
     //HOST CONNECTION
-    static bool host_connected = false;
     static bool prev_host_connected = true;
     static uint32_t last_host_connection_check = 0;
+
+    static bool ble_denied = false;
 
     //CABLE CONNECTION
     uint8_t bat_status_l = kaleidoscope::plugin::Battery::get_battery_status_left();
@@ -549,13 +558,13 @@ void connection_state_machine ()
 
             _BleManager.setForceBle(false);
 
-            host_connected = true;
-
             Packet p{};
             p.header.command = CONNECTED;
             p.header.size = 0;
             p.header.device = BLE_NEURON_2_DEFY;
             Communications.sendPacket(p);
+
+            ble_denied = false; //We will restart the BLE denied flag when we connect to BT due to the press of the pairing key. This will allow the BLE to be enabled again if the Neuron is disconnected.
 
             conn_state = Connection_status::CHECK_USB_CONN;
         }
@@ -580,7 +589,6 @@ void connection_state_machine ()
                 host_connected = true;
                 if(_BleManager.get_pairing_key_press())
                 {
-                    //NRF_LOG_INFO("Pairing key pressed");
                     conn_state = Connection_status::IDLE;
                     break;
                 }
@@ -627,8 +635,10 @@ void connection_state_machine ()
                 {
                     kaleidoscope::plugin::RadioManager::init();
                 }
-
-                ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                if (!ble_innited())
+                {
+                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                }
                 conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
             }
             //Send the connected message to the KS.
@@ -667,7 +677,7 @@ void connection_state_machine ()
 
         case Connection_status::CHECK_USB_TIMER:
         {
-            if( millis() - usbConnectionTime > USB_CONNECTION_TIMEOUT  && !bleInitiated)
+            if( (millis() - usbConnectionTime > USB_CONNECTION_TIMEOUT  && !bleInitiated) || force_ble_enabled)
             {
                 NRF_LOG_INFO("+++++USB CONNECTION TIMEOUT++++");
                 conn_state = Connection_status::CHECK_NEURON_CONNECTORS;
@@ -682,7 +692,6 @@ void connection_state_machine ()
 
         case Connection_status::CHECK_NEURON_CONNECTORS:
         {
-            static bool ble_denied = false;
             NRF_LOG_INFO("CHECK NEURON CONNECTORS");
 
             /*
@@ -700,10 +709,7 @@ void connection_state_machine ()
                 ble_denied = true;
                 conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
             }
-            else
-            {
-                ble_denied = false;
-            }
+
             if(!ble_denied)
             {
                 //One sides are disconnected from Neuron. We will start the BLE automatically.
@@ -778,7 +784,6 @@ void Communications::run()
   WiredCommunications::run();
   RFGWCommunications::run();
   connection_state_machine();
-  //check_host_connection();
 }
 
 bool Communications::isWiredLeftAlive()
