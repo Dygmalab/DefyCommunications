@@ -42,6 +42,8 @@ class Communications {
 
    void request_keyscanner_layers();
 
+   bool is_host_connected();
+
   BindingCallbacks<Commands, Packet> callbacks{};
 };
 
