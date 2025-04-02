@@ -111,6 +111,18 @@ void check_if_keyboard_is_wired_wireless(){
   }
 }
 
+bool Communications::is_host_connected()
+{
+    if (host_connected == Host_status::CONNECTED)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
