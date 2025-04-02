@@ -496,7 +496,7 @@ bool check_usb_connection()
 
 bool Communications::is_host_connected()
 {
-    return host_connected;
+    return host_connected || ble_connected();
 }
 
 void connection_state_machine ()
@@ -587,6 +587,10 @@ void connection_state_machine ()
             else
             {
                 host_connected = true;
+                if (ble_connected())
+                {
+                   ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                }
                 if(_BleManager.get_pairing_key_press())
                 {
                     conn_state = Connection_status::IDLE;
