@@ -76,6 +76,14 @@ enum class Connection_status
 
 }conn_state = Connection_status::SET_USB_TIMER;
 
+enum class Side
+{
+    LEFT = 1,
+    RIGHT,
+    BOTH,
+    NONE
+};
+
 bool mode_led_requested = false;
 
 //HOST CONNECTION STATUS
@@ -500,10 +508,54 @@ bool Communications::is_host_connected()
     return host_connected || ble_connected();
 }
 
+static void _set_wired_channel(Side _side)
+{
+    //TODO: change packet header to use NEURON_DEFY.
+}
+
+static void _set_rf_channel(Side _side)
+{
+    //TODO: change packet header to use RF_NEURON_DEFY.
+}
+
+static void _set_bt_channel(Side _side)
+{
+    // TODO: change packet header to use BLE_NEURON_2_DEFY.
+}
+
+void setup_communications_channel(bool isDefyLeftWired, bool isDefyRightWired)
+{
+    if(ble_innited()) // If the BLE is inited we will not set the channel. We already set it in the init function.
+    {
+        return;
+    }
+    // We will set the channel to the one we are using.
+    if (isDefyLeftWired && isDefyRightWired)
+    {
+        _set_wired_channel(Side::BOTH);
+    }
+    else if(isDefyLeftWired && !isDefyRightWired)
+    {
+        _set_wired_channel(Side::LEFT);
+        _set_rf_channel(Side::RIGHT);
+    }
+    else if(!isDefyLeftWired && isDefyRightWired)
+    {
+        _set_wired_channel(Side::RIGHT);
+        _set_rf_channel(Side::LEFT);
+    }
+    else
+    {
+        _set_rf_channel(Side::BOTH);
+    }
+}
+
 void connection_state_machine ()
 {
     //BLE STATUS
     static bool force_ble_enabled = _BleManager.getForceBle();
+    static bool ble_denied = false;
+
     //USB CONNECTION
     volatile uint32_t usbConnectionTime = 0;
 
@@ -511,16 +563,16 @@ void connection_state_machine ()
     static bool prev_host_connected = true;
     static uint32_t last_host_connection_check = 0;
 
-    static bool ble_denied = false;
+    // KEYSCANNER INSTANCE
+    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
 
-    //CABLE CONNECTION
+    //CABLES CONNECTIONS
     uint8_t bat_status_l = kaleidoscope::plugin::Battery::get_battery_status_left();
     uint8_t bat_status_r = kaleidoscope::plugin::Battery::get_battery_status_right();
-
-     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
     auto isDefyLeftWired = keyScanner.leftSideWiredConnection();
     auto isDefyRightWired = keyScanner.rightSideWiredConnection();
 
+    //WIRELESS MODE STATUS
     bool bleInitiated = ble_innited();
     bool radioInited = kaleidoscope::plugin::RadioManager::isInited();
 
@@ -537,11 +589,10 @@ void connection_state_machine ()
         case Connection_status::CHECK_FORCE_BLE:
         {
             //NRF_LOG_INFO("CHECK FORCE BLE");
-
             //If the force ble is enable, we must go into advertising mode, ignoring the USB.
             if(force_ble_enabled)
             {
-                NRF_LOG_INFO("FORCE BLE ENABLED");
+                //NRF_LOG_INFO("FORCE BLE ENABLED");
                 conn_state = Connection_status::INIT_BT;
             }
             else
@@ -558,6 +609,8 @@ void connection_state_machine ()
             _BleManager.init();
 
             _BleManager.setForceBle(false);
+
+            _set_bt_channel(Side::BOTH);
 
             Packet p{};
             p.header.command = CONNECTED;
@@ -590,6 +643,14 @@ void connection_state_machine ()
                 host_connected = true;
                 if (ble_connected() || ble_is_advertising_mode())
                 {
+                    // We need to check if the sides are connected to the Neuron. if the Ble is initialized and we disconnect both sides, neuron will get stuck
+                    // until we reconnect one side and quit the ble advertising mode.
+                    if(!isDefyLeftWired && !isDefyRightWired)
+                    {
+                        // reset neuron to get out of the ble advertising mode. And start the radio manager.
+                        conn_state = Connection_status::RESET_NEURON;
+                    }
+
                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
                 }
                 if(_BleManager.get_pairing_key_press())
@@ -609,13 +670,13 @@ void connection_state_machine ()
 
             if(mode_led_requested == true && host_connected == true && !force_ble_enabled)
             {
-                NRF_LOG_INFO("MODE LED ASKED");
+                //NRF_LOG_INFO("MODE LED ASKED");
                 mode_led_requested = false;
                 ::LEDControl.set_mode(::LEDControl.get_mode_index()); //Send the mode to the KS.
             }
             else if(mode_led_requested == true && host_connected == false)
             {
-                NRF_LOG_INFO("MODE LED ASKED BUT HOST DISCONNECTED OR BLE ACTIVE");
+                //NRF_LOG_INFO("MODE LED ASKED BUT HOST DISCONNECTED OR BLE ACTIVE");
                 mode_led_requested = false;
             }
 
@@ -626,16 +687,16 @@ void connection_state_machine ()
         {
             if (host_connected == false)
             {
-                NRF_LOG_INFO("Host DISCONNECTED");
+                //NRF_LOG_INFO("Host DISCONNECTED");
                 last_host_connection_check = millis();
                 conn_state = Connection_status::CHECK_WIRED_OR_WIRELESS;
             }
             else
             {
-                NRF_LOG_INFO("Host CONNECTED");
+                //NRF_LOG_INFO("Host CONNECTED");
 
                 // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
-                if(!radioInited && !ble_innited()  )
+                if(!radioInited && !ble_innited())
                 {
                     kaleidoscope::plugin::RadioManager::init();
                 }
@@ -665,15 +726,16 @@ void connection_state_machine ()
         case Connection_status::CHECK_WIRED_OR_WIRELESS:
         {
             //NRF_LOG_INFO("CHECK WIRED OR WIRELESS");
+            setup_communications_channel(isDefyLeftWired, isDefyRightWired);
 
             if(FirmwareVersion.keyboard_is_wireless())
             {
-                NRF_LOG_INFO("CHECK USB TIMER");
+                //NRF_LOG_INFO("CHECK USB TIMER");
                 conn_state = Connection_status::CHECK_USB_TIMER;
             }
             else
             {
-                NRF_LOG_INFO("KEYBOARD IS WIRED ONLY");
+                //NRF_LOG_INFO("KEYBOARD IS WIRED ONLY");
                 conn_state = Connection_status::CHECK_USB_CONN;
             }
         }
@@ -683,7 +745,7 @@ void connection_state_machine ()
         {
             if( (millis() - usbConnectionTime > USB_CONNECTION_TIMEOUT  && !bleInitiated) || force_ble_enabled)
             {
-                NRF_LOG_INFO("+++++USB CONNECTION TIMEOUT++++");
+                //NRF_LOG_INFO("+++++USB CONNECTION TIMEOUT++++");
                 conn_state = Connection_status::CHECK_NEURON_CONNECTORS;
             }
             else
@@ -696,21 +758,21 @@ void connection_state_machine ()
 
         case Connection_status::CHECK_NEURON_CONNECTORS:
         {
-            NRF_LOG_INFO("CHECK NEURON CONNECTORS");
-
+            //NRF_LOG_INFO("CHECK NEURON CONNECTORS");
             /*
             0 -> Side connected and powered from its battery or the other side's battery.
             1 o 2 -> Side connected and powered from the N2 while it is connected to the PC via USB.
             4 -> Side disconnected.
             */
-
             bool isWiredMode = isDefyLeftWired && isDefyRightWired;
+
             bool isRFMode = !isDefyLeftWired && !isDefyRightWired;
+
             if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
             {
                 //Both sides are connected or disconnected from Neuron. We will not start the BLE automatically.
 
-                NRF_LOG_DEBUG("BLE mode denied both sides connected");
+                //NRF_LOG_DEBUG("BLE mode denied both sides connected");
                 ble_denied = true;
                 conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
             }
@@ -719,7 +781,7 @@ void connection_state_machine ()
             {
                 //One sides are disconnected from Neuron. We will start the BLE automatically.
 
-                NRF_LOG_DEBUG("BLE mode allowed, one  sides disconnected from Neuron.");
+                //NRF_LOG_DEBUG("BLE mode allowed, one  sides disconnected from Neuron.");
 
                 conn_state = Connection_status::INIT_BT;
             }
@@ -761,7 +823,6 @@ void connection_state_machine ()
                   //Send the connected message to the KS.
                 NRF_LOG_INFO("Sending host connection Status");
 
-                //TODO: group this in a function
                 Communications_protocol::Packet packet{};
                 packet.header.command = Communications_protocol::HOST_CONNECTION;
                 packet.header.size    = 2;
