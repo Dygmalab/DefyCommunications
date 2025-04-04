@@ -37,9 +37,10 @@
 
 #define PORT_IS_ALIVE_TIMEOUT_MS        2000
 
+// This interval exist to prevent the host to be connected and disconnected too fast when the user is pluging and unplugging the USB cable.
 #define HOST_CONNECTION_CHECK_INTERVAL  250
 
-#define USB_CONNECTION_TIMEOUT         3000
+#define USB_CONNECTION_TIMEOUT         500
 
 #define USB_CONNECTION_MARGIN          100
 
@@ -587,7 +588,7 @@ void connection_state_machine ()
             else
             {
                 host_connected = true;
-                if (ble_connected())
+                if (ble_connected() || ble_is_advertising_mode())
                 {
                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
                 }
@@ -633,9 +634,8 @@ void connection_state_machine ()
             {
                 NRF_LOG_INFO("Host CONNECTED");
 
-                //If the host is connected with USB we need to initialize the radio manager.
-                //! Check if the radio manager is already initialized.
-                if(!radioInited && !ble_innited())
+                // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
+                if(!radioInited && !ble_innited()  )
                 {
                     kaleidoscope::plugin::RadioManager::init();
                 }
@@ -705,9 +705,10 @@ void connection_state_machine ()
             */
 
             bool isWiredMode = isDefyLeftWired && isDefyRightWired;
-            if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode)
+            bool isRFMode = !isDefyLeftWired && !isDefyRightWired;
+            if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
             {
-                //Both sides are connected to Neuron. We will not start the BLE automatically.
+                //Both sides are connected or disconnected from Neuron. We will not start the BLE automatically.
 
                 NRF_LOG_DEBUG("BLE mode denied both sides connected");
                 ble_denied = true;
