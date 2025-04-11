@@ -54,6 +54,12 @@ static SideInfo right{Communications_protocol::KEYSCANNER_DEFY_RIGHT};
 
 void checkActive(SideInfo &side);
 
+void new_connection_handle(void)
+{
+    /*
+     * Report new connection here
+     */
+}
 
 /****************************************************************** */
 
@@ -140,13 +146,25 @@ class WiredCommunications {
     spiPort.run();
   }
 
+  static bool portIsConnected(uint8_t port) {
+      SpiPort &spiPort = port == 0 ? spiPort1 : spiPort2;
+
+      return spiPort.is_connected();
+  }
+
   static void run() {
 
-    auto const &keyScanner       = kaleidoscope::Runtime.device().keyScanner();
+    /**********************/
+    /*     Left side      */
+    /**********************/
     static bool wasLeftConnected = false;
-    auto isDefyLeftWired         = keyScanner.leftSideWiredConnection();
+    auto isDefyLeftWired   = portIsConnected(0);
+
+    if(!wasLeftConnected && isDefyLeftWired) {
+      new_connection_handle();
+    }
+    portRun(0);
     if (isDefyLeftWired) {
-      portRun(0);
       readPacket(0);
     }
     if (wasLeftConnected && !isDefyLeftWired) {
@@ -154,10 +172,17 @@ class WiredCommunications {
     }
     wasLeftConnected = isDefyLeftWired;
 
+    /**********************/
+    /*     Right side     */
+    /**********************/
     static bool wasRightConnected = false;
-    auto isDefyRightWired         = keyScanner.rightSideWiredConnection();
+    auto isDefyRightWired = portIsConnected(1);
+
+    if(!wasRightConnected && isDefyRightWired) {
+      new_connection_handle();
+    }
+    portRun(1);
     if (isDefyRightWired) {
-      portRun(1);
       readPacket(1);
     }
     if (wasRightConnected && !isDefyRightWired) {
