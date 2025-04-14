@@ -20,6 +20,7 @@
 #ifdef NRF52_ARCH
 #include "Communications.h"
 #include "Communications_protocol_rf.h"
+#include "Communications_side.h"
 #include "SpiPort.h"
 #include "rf_host_device_api.h"
 #include "CRC_wrapper.h"
@@ -44,15 +45,30 @@
 
 #define USB_CONNECTION_MARGIN          100
 
-static SpiPort spiPort1(1);
-static Devices spiPort1Device{Communications_protocol::UNKNOWN};
-static uint32_t spiPort1LastCommunication{0};
+typedef enum
+{
+    COM_SPIPORT_STATE_DISCONNECTED = 1,
+    COM_SPIPORT_STATE_CONNECTED,
+} com_spiPort_state_t;
 
+typedef struct
+{
+    com_spiPort_state_t state;
+
+    SpiPort * p_spiPort;
+    ComSide * p_comSide;
+} com_spiPort_t;
+
+static SpiPort spiPort1(1);
 static SpiPort spiPort2(2);
-static Devices spiPort2Device{Communications_protocol::UNKNOWN};
-static uint32_t spiPort2LastCommunication{0};
+static ComSide comSideLeft( SIDE_TYPE_KS_LEFT );
+static ComSide comSideRight( SIDE_TYPE_KS_RIGHT );
+
+static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comSide = NULL };
+static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comSide = NULL };
 
 static bool host_connection_requested = false;
+
 enum class HostConnectionStatus
 {
     HOST_CONNECTED,
@@ -315,140 +331,115 @@ RFGWCommunications::Side RFGWCommunications::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT
 
 class WiredCommunications
 {
- public:
-  static void init()
-  {
-    spiPort1.init();
-    spiPort2.init();
-  }
-
-  static void readPacket(uint8_t port)
-  {
-    SpiPort &spiPort             = port == 1 ? spiPort1 : spiPort2;
-    Devices &device              = port == 1 ? spiPort1Device : spiPort2Device;
-    uint32_t &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
-    Packet packet{};
-    if (spiPort.readPacket(packet)) {
-      lastCommunications = millis();
-      device             = packet.header.device;
-      Communications.callbacks.call(packet.header.command, packet);
-    }
-  }
-
-  static bool isPortAlive( uint8_t port )
-  {
-    uint32_t &lastCommunications = port == 1 ? spiPort1LastCommunication : spiPort2LastCommunication;
-
-    /* Check if there was any communication at all */
-    if( lastCommunications == 0 )
+public:
+    static void init()
     {
-      return false;
+        spiPort1.init( );
+        spiPort2.init( );
     }
 
-    /* Check how long it is since the last communication */
-    return ( (millis() - lastCommunications) < PORT_IS_ALIVE_TIMEOUT_MS ) ? true : false;
-  }
-
-  static bool isPortLeftAlive( void )
-  {
-    if( spiPort1Device == KEYSCANNER_DEFY_LEFT )
+    static inline void _com_spiPort_state_set( com_spiPort_t * p_com_spiPort, com_spiPort_state_t state )
     {
-      return isPortAlive( 1 );
+        p_com_spiPort->state = state;
     }
-    else if( spiPort2Device == KEYSCANNER_DEFY_LEFT )
+
+    static void _com_spiPort_state_connected_set( com_spiPort_t * p_com_spiPort, ComSide * p_comSide )
     {
-      return isPortAlive( 2 );
+        p_com_spiPort->p_comSide = p_comSide;
+        p_com_spiPort->p_comSide->spi_port_register( p_com_spiPort->p_spiPort );
+
+        _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_CONNECTED );
+
+        new_connection_handle( );
     }
-    else
+
+    static void _com_spiPort_state_disconnected_process( com_spiPort_t * p_com_spiPort )
     {
-      return false;
-    }
-  }
+        Packet packet{};
 
-  static bool isPortRightAlive( void )
-  {
-    if( spiPort1Device == KEYSCANNER_DEFY_RIGHT )
+        /* Check whether the SPI port is connected to a side */
+        if( p_com_spiPort->p_spiPort->is_connected() == false )
+        {
+            /* The SPI port is not connected */
+            return;
+        }
+
+        /* The SPI port is connected - check which side it is */
+
+        if ( p_com_spiPort->p_spiPort->peekPacket( packet ) == false )
+        {
+            /* No packet in the buffer */
+            return;
+        }
+
+        switch( packet.header.device )
+        {
+            case KEYSCANNER_DEFY_LEFT:
+//            case RF_DEFY_LEFT:
+//            case BLE_DEFY_LEFT:
+
+                /* Set the SPI COM left connectivity */
+                _com_spiPort_state_connected_set( p_com_spiPort, &comSideLeft );
+
+                break;
+
+            case KEYSCANNER_DEFY_RIGHT:
+//            case RF_DEFY_RIGHT:
+//            case BLE_DEFY_RIGHT:
+
+                /* Set the SPI COM right connectivity */
+                _com_spiPort_state_connected_set( p_com_spiPort, &comSideRight );
+
+                break;
+
+            default:
+
+                ASSERT_DYGMA( false, "Unexpected SPI packet Device type" );
+
+                break;
+        }
+    }
+
+    static void _com_spiPort_state_connected_process( com_spiPort_t * p_com_spiPort )
     {
-      return isPortAlive( 1 );
+        /* Check whether the Side is still connected over wire */
+        if( p_com_spiPort->p_comSide->wired_is_connected() == true )
+        {
+            return;
+        }
+
+        /* The side is disconnected over wire */
+
+        p_com_spiPort->p_comSide = nullptr;
+        _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_DISCONNECTED );
     }
-    else if( spiPort2Device == KEYSCANNER_DEFY_RIGHT )
+
+    static void com_spiPort_machine( com_spiPort_t * p_com_spiPort )
     {
-      return isPortAlive( 2 );
+        /* Run the spi port */
+        p_com_spiPort->p_spiPort->run();
+
+        switch( p_com_spiPort->state )
+        {
+            case COM_SPIPORT_STATE_DISCONNECTED:
+
+                _com_spiPort_state_disconnected_process( p_com_spiPort );
+
+                break;
+
+            case COM_SPIPORT_STATE_CONNECTED:
+
+                _com_spiPort_state_connected_process( p_com_spiPort );
+
+                break;
+        }
     }
-    else
+
+    static void run()
     {
-      return false;
+        com_spiPort_machine( &com_spiPort1 );
+        com_spiPort_machine( &com_spiPort2 );
     }
-  }
-
-  static void disconnect(uint8_t port)
-  {
-    SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
-    Devices &device                    = port == 1 ? spiPort1Device : spiPort2Device;
-    Packet packet{};
-
-    packet.header.command = Communications_protocol::DISCONNECTED;
-    packet.header.device  = device;
-    Communications.callbacks.call(packet.header.command, packet);
-    device = UNKNOWN;
-    //Remove all the left packets at disconnections
-    spiPort.clearRead();
-    spiPort.clearSend();
-  }
-
-  static void portRun( uint8_t port ) {
-      SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
-
-      spiPort.run();
-  }
-
-  static bool portIsConnected( uint8_t port ) {
-      SpiPort &spiPort                   = port == 1 ? spiPort1 : spiPort2;
-
-      return spiPort.is_connected();
-  }
-
-  static void run() {
-
-    /**********************/
-    /*     Left side      */
-    /**********************/
-    static bool wasLeftConnected = false;
-    auto isDefyLeftWired   = portIsConnected(1);
-
-    if(!wasLeftConnected && isDefyLeftWired) {
-      new_connection_handle();
-    }
-    portRun(1);
-    if (isDefyLeftWired) {
-      readPacket(1);
-    }
-    if(wasLeftConnected && !isDefyLeftWired) {
-      disconnect(1);
-    }
-    wasLeftConnected = isDefyLeftWired;
-
-    /**********************/
-    /*     Right side     */
-    /**********************/
-    static bool wasRightConnected = false;
-    auto isDefyRightWired = portIsConnected(2);
-
-    if(!wasRightConnected && isDefyRightWired) {
-      new_connection_handle();
-    }
-    portRun(2);
-    if (isDefyRightWired) {
-      readPacket(2);
-    }
-    if(wasRightConnected && !isDefyRightWired) {
-      disconnect(2);
-    }
-    wasRightConnected = isDefyRightWired;
-
-  }
-
-
 };
 
 
@@ -464,14 +455,10 @@ void Communications::get_keyscanner_configuration(){
 void Communications::init()
 {
   callbacks.bind(CONNECTED, [this](Packet p) {
-    p.header.size    = 0;
-    p.header.device  = p.header.device;
-    p.header.command = CONNECTED;
 
 #if DEBUG_LOG_N2_COMMUNICATIONS
     NRF_LOG_INFO("Get connected from %i", p.header.device);
 #endif
-    sendPacket(p);
 
     get_keyscanner_configuration();
 
@@ -850,137 +837,39 @@ void Communications::run()
   WiredCommunications::run();
   RFGWCommunications::run();
   connection_state_machine();
+
+  comSideLeft.run();
+  comSideRight.run();
 }
 
 bool Communications::isWiredLeftAlive()
 {
-  return WiredCommunications::isPortLeftAlive();
+  return comSideLeft.wired_is_connected();
 }
 
 bool Communications::isWiredRightAlive()
 {
-  return WiredCommunications::isPortRightAlive();
+  return comSideRight.wired_is_connected();
 }
 
 bool Communications::sendPacket(Packet packet)
 {
-  Devices device_to_send = packet.header.device;
+    bool result = false;
 
-  if (device_to_send == UNKNOWN) {
-    if (!ble_innited()) {
-      if (spiPort1Device != UNKNOWN) {
-        packet.header.device = Communications_protocol::NEURON_DEFY;
-        spiPort1.sendPacket(packet);
-      }
+    /* We route the packet both comSide modules. They will decide if they send the packet or not.
+     * The result is true if any of the sides has processed the packet. */
 
-      if (spiPort2Device != UNKNOWN) {
-        packet.header.device = Communications_protocol::NEURON_DEFY;
-        spiPort2.sendPacket(packet);
-      }
-    }
-    else
+    if( comSideLeft.sendPacket( packet ) == true )
     {
-      if (spiPort2Device != UNKNOWN) {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
-          packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        }
-
-        if (device_to_send == UNKNOWN) {
-          packet.header.device = Communications_protocol::UNKNOWN;
-        }
-
-        spiPort2.sendPacket(packet);
-      }
-
-      if (spiPort1Device != UNKNOWN) {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT) {
-          packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        }
-
-        if (device_to_send == UNKNOWN) {
-          packet.header.device = Communications_protocol::UNKNOWN;
-        }
-
-        spiPort1.sendPacket(packet);
-      }
+        result = true;
     }
 
-    if (RFGWCommunications::right.connected) {
-      RFGWCommunications::right.sendPacket(packet);
-    }
-
-    if (RFGWCommunications::left.connected) {
-      RFGWCommunications::left.sendPacket(packet);
-    }
-
-    return true;
-  }
-
-  if (!ble_innited())
-  {
-    if (spiPort1Device == device_to_send)
+    if( comSideRight.sendPacket( packet ) == true )
     {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      spiPort1.sendPacket(packet);
+        result = true;
     }
 
-    if (spiPort2Device == device_to_send)
-    {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      spiPort2.sendPacket(packet);
-    }
-  }
-  else
-  {
-    //If both of then are connected we just want to use the wired connection in both cases
-    if (spiPort2Device != UNKNOWN && spiPort1Device != UNKNOWN)
-    {
-      if ((spiPort1Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort1Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
-        packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        spiPort1.sendPacket(packet);
-      }
-
-      if ((spiPort2Device == KEYSCANNER_DEFY_LEFT && device_to_send == KEYSCANNER_DEFY_LEFT) || (spiPort2Device == KEYSCANNER_DEFY_RIGHT && device_to_send == KEYSCANNER_DEFY_RIGHT)) {
-        packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        spiPort2.sendPacket(packet);
-      }
-    }
-    else
-    {
-      if (spiPort2Device != UNKNOWN)
-      {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT)
-        {
-          packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        }
-
-        spiPort2.sendPacket(packet);
-      }
-
-      if (spiPort1Device != UNKNOWN)
-      {
-        if (device_to_send != BLE_DEFY_RIGHT && device_to_send != BLE_DEFY_LEFT)
-        {
-          packet.header.device = Communications_protocol::BLE_NEURON_2_DEFY;
-        }
-
-        spiPort1.sendPacket(packet);
-      }
-    }
-
-    //No need to continue RF is disabled in ble mode
-    return true;
-  }
-
-  if (RFGWCommunications::left.connected && device_to_send == Communications_protocol::RF_DEFY_LEFT)
-  {
-    RFGWCommunications::left.sendPacket(packet);
-  }
-
-  if (RFGWCommunications::right.connected && device_to_send == Communications_protocol::RF_DEFY_RIGHT)
-  {
-    RFGWCommunications::right.sendPacket(packet);
-  }
+    return result;
 
   return true;
 }
