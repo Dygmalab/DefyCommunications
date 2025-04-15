@@ -22,19 +22,15 @@
 #include "Communications_protocol.h"
 #include "SpiPort.h"
 #include "Time_counter.h"
+#include "Communications_types.h"
 
 
-typedef enum
-{
-    SIDE_TYPE_KS_LEFT = 1,
-    SIDE_TYPE_KS_RIGHT,
-} side_type_t;
 
 class ComSide
 {
     public:
 
-        ComSide( side_type_t side_type );
+        ComSide( com_side_type_t side_type );
 
 //        void init(void);
 

@@ -61,8 +61,8 @@ typedef struct
 
 static SpiPort spiPort1(1);
 static SpiPort spiPort2(2);
-static ComSide comSideLeft( SIDE_TYPE_KS_LEFT );
-static ComSide comSideRight( SIDE_TYPE_KS_RIGHT );
+static ComSide comSideLeft( COM_SIDE_TYPE_KS_LEFT );
+static ComSide comSideRight( COM_SIDE_TYPE_KS_RIGHT );
 
 static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comSide = NULL };
 static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comSide = NULL };
