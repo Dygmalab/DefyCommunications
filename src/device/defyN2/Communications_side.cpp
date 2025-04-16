@@ -75,9 +75,17 @@ void ComSide::com_model_rf_init( com_side_type_t side_type )
 
 void ComSide::com_model_ble_init( com_side_type_t side_type )
 {
-#warning "Needs to be implemented yet"
+    bool result;
 
-    com_model_ble.init( side_type );
+    ComModelBle::com_model_ble_config_t config;
+
+    config.side_type = side_type;
+    config.p_instance = this;
+    config.event_cb = com_model_event_cb;
+
+    result = com_model_ble.init( &config );
+
+    ASSERT_DYGMA( result == true, "com_model_ble.init failed" );
 }
 
 
@@ -110,6 +118,19 @@ inline void ComSide::com_wired_start( void )
 
     /* Set the communication mode and start the connection */
     mode = SIDE_MODE_WIRED;
+    state_set( SIDE_STATE_CONNECTION_START );
+}
+
+inline void ComSide::com_ble_start( void )
+{
+    /* Assign the SPI port to the ble communication model */
+    com_model_ble.spi_port_set( p_spiPort );
+
+    /* Set the pointer to the communication model  */
+    p_com_model =  com_model_ble.com_model_get();
+
+    /* Set the communication mode and start the connection */
+    mode = SIDE_MODE_BLE;
     state_set( SIDE_STATE_CONNECTION_START );
 }
 

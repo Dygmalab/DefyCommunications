@@ -20,8 +20,8 @@
 
 const ComModelWired::com_model_def_t ComModelWired::p_com_model_def_array[] =
 {
-    { .side_type = COM_SIDE_TYPE_KS_LEFT,    .dev_side = Communications_protocol::KEYSCANNER_DEFY_LEFT,  .dev_neuron = NEURON_DEFY },
-    { .side_type = COM_SIDE_TYPE_KS_RIGHT,   .dev_side = Communications_protocol::KEYSCANNER_DEFY_RIGHT, .dev_neuron = NEURON_DEFY },
+    { .side_type = COM_SIDE_TYPE_KS_LEFT,    .dev_side = KEYSCANNER_DEFY_LEFT,  .dev_neuron = NEURON_DEFY },
+    { .side_type = COM_SIDE_TYPE_KS_RIGHT,   .dev_side = KEYSCANNER_DEFY_RIGHT, .dev_neuron = NEURON_DEFY },
 };
 #define get_com_model_def( def, id ) _get_def( def, p_com_model_def_array, com_model_def_t, side_type, id )
 

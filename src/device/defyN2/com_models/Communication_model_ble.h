@@ -23,29 +23,61 @@
 
 #include "Communication_model.h"
 #include "Communications_types.h"
+#include "SpiPort.h"
 
 class ComModelBle
 {
     public:
 
-        bool init( com_side_type_t side );
+        typedef struct
+        {
+            com_side_type_t side_type;
+
+            /* Events */
+            void * p_instance;
+            ComModel::com_model_event_cb event_cb;
+        } com_model_ble_config_t;
+
+        bool init( com_model_ble_config_t * p_config );
+        void spi_port_set( SpiPort * p_spiPort );
+
         ComModel * com_model_get();
 
     private:
 
+        typedef struct
+        {
+            com_side_type_t side_type;
+
+            Communications_protocol::Devices    dev_side;
+            Communications_protocol::Devices    dev_neuron;
+        } com_model_def_t;
+
+    private:
+
+        /* SPI */
+        SpiPort * p_spiPort;
+
         /* Communication model instance */
+        const com_model_def_t * p_com_model_def;
         ComModel com_model;
 
-        static const ComModel::com_model_if_t com_model_if;
+        /* Event handler */
+        void * p_instance;
+        ComModel::com_model_event_cb event_cb;
 
     private:
 
         inline bool com_model_init();
 
+        inline void event_handler( ComModel::com_model_event_t event );
+
         inline bool send_packet( Packet &packet );
         inline bool read_packet( Packet &packet );
         inline bool is_connected( void );
         inline void disconnect( void );
+
+        Communications_protocol::Devices dev_side_get( void );
 
     private:
 
@@ -53,6 +85,11 @@ class ComModelBle
         static bool com_model_read_packet( void * p_instance, Packet &packet );
         static bool com_model_is_connected( void * p_instance );
         static void com_model_disconnect( void * p_instance );
+
+        static Communications_protocol::Devices com_model_dev_side_get( void * p_instance );
+
+        static const com_model_def_t p_com_model_def_array[];
+        static const ComModel::com_model_if_t com_model_if;
 };
 
 

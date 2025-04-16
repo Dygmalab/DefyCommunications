@@ -103,6 +103,7 @@ class ComSide
         inline void com_model_event_process( ComModel::com_model_event_t event );
 
         inline void com_wired_start( void );
+        inline void com_ble_start( void );
 
         inline void state_set( side_state_t state );
         inline void state_set_disconnected();
