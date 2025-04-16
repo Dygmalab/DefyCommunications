@@ -461,20 +461,20 @@ void Communications::init()
 #endif
 
     get_keyscanner_configuration();
+  });
 
-    callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
-    {
-        //Keyscanner will ask for the host connection.
-        //NRF_LOG_INFO("HOST CONNECTION ASKED");
-        host_connection_requested = true;
-    });
+  callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
+  {
+      //Keyscanner will ask for the host connection.
+      //NRF_LOG_INFO("HOST CONNECTION ASKED");
+      host_connection_requested = true;
+  });
 
-    callbacks.bind(MODE_LED, [this](Packet p)
-    {
-            NRF_LOG_INFO("MODE LED ASKED");
-            mode_led_requested = true;
-    });
-});
+  callbacks.bind(MODE_LED, [this](Packet p)
+  {
+          NRF_LOG_INFO("MODE LED ASKED");
+          mode_led_requested = true;
+  });
 
   WiredCommunications::init();
   RFGWCommunications::init();
