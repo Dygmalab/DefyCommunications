@@ -461,6 +461,9 @@ void Communications::init()
 #endif
 
     get_keyscanner_configuration();
+
+    /* Send the Host connection info */
+    sendPacketHostConnection( );
   });
 
   callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
