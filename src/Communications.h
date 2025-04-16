@@ -37,6 +37,7 @@ class Communications {
   bool isWiredRightAlive();
 
   bool sendPacket(Packet data);
+  bool sendPacketHostConnection( void );
 
   void get_keyscanner_configuration();
 

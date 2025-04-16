@@ -696,15 +696,8 @@ void connection_state_machine ()
             //Send the connected message to the KS.
             //NRF_LOG_INFO("Sending host connection Status");
 
-            //TODO: group this in a function
-            Communications_protocol::Packet packet{};
-            packet.header.command = Communications_protocol::HOST_CONNECTION;
-            packet.header.size    = 2;
-            packet.data[0]        = host_connected;
-            packet.data[1]        = ble_innited();
-            Communications.sendPacket(packet);
+            Communications.sendPacketHostConnection( );
             //**************************************
-
             prev_host_connected = host_connected;
             host_connection_requested = false;
         }
@@ -810,12 +803,7 @@ void connection_state_machine ()
                   //Send the connected message to the KS.
                 NRF_LOG_INFO("Sending host connection Status");
 
-                Communications_protocol::Packet packet{};
-                packet.header.command = Communications_protocol::HOST_CONNECTION;
-                packet.header.size    = 2;
-                packet.data[0]        = host_connected;
-                packet.data[1]        = ble_innited();
-                Communications.sendPacket(packet);
+                Communications.sendPacketHostConnection( );
                 //**************************************
                 prev_host_connected = host_connected;
                 host_connection_requested = false;
@@ -872,6 +860,18 @@ bool Communications::sendPacket(Packet packet)
     return result;
 
   return true;
+}
+
+bool Communications::sendPacketHostConnection( void )
+{
+    Communications_protocol::Packet packet{};
+
+    packet.header.command = Communications_protocol::HOST_CONNECTION;
+    packet.header.size    = 2;
+    packet.data[0]        = host_connected;
+    packet.data[1]        = ble_innited();
+
+    return sendPacket(packet);
 }
 
 class Communications Communications;
