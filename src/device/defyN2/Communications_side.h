@@ -36,6 +36,7 @@ class ComSide
         ComSide( com_side_type_t side_type );
 
 //        void init(void);
+        void ble_enable();
 
         void spi_port_register( SpiPort * p_spiPort );
         bool spi_is_connected( void );

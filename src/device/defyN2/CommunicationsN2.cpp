@@ -602,11 +602,8 @@ void connection_state_machine ()
 
             _set_bt_channel(Side::BOTH);
 
-            Packet p{};
-            p.header.command = CONNECTED;
-            p.header.size = 0;
-            p.header.device = BLE_NEURON_2_DEFY;
-            Communications.sendPacket(p);
+            comSideLeft.ble_enable();
+            comSideRight.ble_enable();
 
             ble_denied = false; //We will restart the BLE denied flag when we connect to BT due to the press of the pairing key. This will allow the BLE to be enabled again if the Neuron is disconnected.
 

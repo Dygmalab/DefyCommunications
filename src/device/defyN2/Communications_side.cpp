@@ -51,6 +51,16 @@ ComSide::ComSide( com_side_type_t side_type )
     reconnect_needed = false;
 }
 
+void ComSide::ble_enable()
+{
+    ASSERT_DYGMA( rf_enabled == false, "The RF and BLE should not be enabled at the same time." );
+
+    ble_enabled = true;
+
+    /* Request the reconnection */
+    reconnect_needed = true;
+}
+
 void ComSide::com_model_wired_init( com_side_type_t side_type )
 {
     bool result;

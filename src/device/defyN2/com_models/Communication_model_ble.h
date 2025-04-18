@@ -78,6 +78,7 @@ class ComModelBle
         inline void disconnect( void );
 
         Devices dev_side_get( void );
+        inline bool dev_side_is_valid( Devices dev_side );
 
     private:
 

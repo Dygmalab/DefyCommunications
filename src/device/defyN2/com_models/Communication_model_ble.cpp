@@ -25,6 +25,8 @@ const ComModelBle::com_model_def_t ComModelBle::p_com_model_def_array[] =
 };
 #define get_com_model_def( def, id ) _get_def( def, p_com_model_def_array, com_model_def_t, side_type, id )
 
+#define COM_MODEL_DEF_ARRAY_LEN     ( sizeof( p_com_model_def_array ) / sizeof( com_model_def_t ) )
+
 bool ComModelBle::com_model_init()
 {
     ComModel::com_model_config_t config;
@@ -77,30 +79,84 @@ ComModel * ComModelBle::com_model_get()
     return &com_model;
 }
 
-bool ComModelBle::send_packet( Packet &packet )
+bool ComModelBle::dev_side_is_valid( Devices dev_side )
 {
-    ASSERT_DYGMA( false, "Not implemented" );
+    const com_model_def_t * p_com_model_def;
+
+    /* In BLE mode any device may communicate its BLE messages over the registered SPI channel.
+     * The connected SPI peer serves as a router for the BLE messages of a remote Side */
+
+    uint8_t i;
+    for( i = 0; i < COM_MODEL_DEF_ARRAY_LEN; i++ )
+    {
+        p_com_model_def = &p_com_model_def_array[i];
+
+        if( dev_side == p_com_model_def->dev_side )
+        {
+            return true;
+        }
+    }
 
     return false;
+}
+
+bool ComModelBle::send_packet( Packet &packet )
+{
+    /* Check if the packet is intended for the peer in the ble communication model.
+     * We accept the model's side Device and broadcast (Unknown) */
+    if( dev_side_is_valid( packet.header.device ) == false && packet.header.device != UNKNOWN )
+    {
+        //ASSERT_DYGMA( false, "Unexpected Send Packet device type" );
+
+        return false;
+    }
+
+    /* Set the ble model's Neuron Device */
+    packet.header.device = p_com_model_def->dev_neuron;
+
+    return p_spiPort->sendPacket( packet );
 }
 
 bool ComModelBle::read_packet( Packet &packet )
 {
-    ASSERT_DYGMA( false, "Not implemented" );
+    /* Try to read the packet */
+    if( p_spiPort->readPacket( packet ) == false )
+    {
+        return false;
+    }
 
-    return false;
+    /* Check if the incoming packet fits the communication model we use */
+    if( dev_side_is_valid( packet.header.device ) == false )
+    {
+        //ASSERT_DYGMA( false, "Unexpected Incoming Packet device type" );
+
+        /* The communication model has changed. Request re-connection */
+        event_handler( ComModel::COM_MODEL_EVENT_RECONNECT_NEEDED );
+
+        return false;
+    }
+
+    return true;
 }
 
 bool ComModelBle::is_connected( void )
 {
-    ASSERT_DYGMA( false, "Not implemented" );
+    if( p_spiPort == nullptr )
+    {
+        return false;
+    }
 
-    return false;
+    return p_spiPort->is_connected();
 }
 
 void ComModelBle::disconnect( void )
 {
-    ASSERT_DYGMA( false, "Not implemented" );
+    /* Remove all the left packets */
+    p_spiPort->clearRead();
+    p_spiPort->clearSend();
+
+    /* Remove the spiPort instance */
+    p_spiPort = nullptr;
 }
 
 Devices ComModelBle::dev_side_get( void )
