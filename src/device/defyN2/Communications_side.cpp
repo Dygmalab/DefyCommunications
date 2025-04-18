@@ -94,7 +94,7 @@ void ComSide::spi_port_register( SpiPort * p_spiPort )
     this->p_spiPort = p_spiPort;
 }
 
-bool ComSide::wired_is_connected( void )
+bool ComSide::spi_is_connected( void )
 {
     if( p_spiPort == nullptr )
     {
@@ -184,11 +184,11 @@ inline void ComSide::state_set_reconnect()
 
 inline void ComSide::state_disconnected_process( void )
 {
-    if( wired_is_connected() == true )
+    if( spi_is_connected() == true )
     {
         if( ble_enabled == true )
         {
-            ASSERT_DYGMA( false, "Not implemented yet" )
+            com_ble_start();
         }
         else if ( wired_enabled == true )
         {

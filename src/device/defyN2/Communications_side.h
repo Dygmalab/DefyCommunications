@@ -38,8 +38,9 @@ class ComSide
 //        void init(void);
 
         void spi_port_register( SpiPort * p_spiPort );
+        bool spi_is_connected( void );
 
-        bool wired_is_connected( void );
+
 
 //        bool readPacket(Packet &packet);      /* NOTE: Packets are distributed via the Communications.callbacks.call from within the Side module */
         bool sendPacket(Packet &packet);

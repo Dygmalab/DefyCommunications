@@ -403,7 +403,7 @@ public:
     static void _com_spiPort_state_connected_process( com_spiPort_t * p_com_spiPort )
     {
         /* Check whether the Side is still connected over wire */
-        if( p_com_spiPort->p_comSide->wired_is_connected() == true )
+        if( p_com_spiPort->p_comSide->spi_is_connected() == true )
         {
             return;
         }
@@ -835,12 +835,12 @@ void Communications::run()
 
 bool Communications::isWiredLeftAlive()
 {
-  return comSideLeft.wired_is_connected();
+  return comSideLeft.spi_is_connected();
 }
 
 bool Communications::isWiredRightAlive()
 {
-  return comSideRight.wired_is_connected();
+  return comSideRight.spi_is_connected();
 }
 
 bool Communications::sendPacket(Packet packet)
