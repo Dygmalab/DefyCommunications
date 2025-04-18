@@ -103,7 +103,7 @@ void ComModelBle::disconnect( void )
     ASSERT_DYGMA( false, "Not implemented" );
 }
 
-Communications_protocol::Devices ComModelBle::dev_side_get( void )
+Devices ComModelBle::dev_side_get( void )
 {
     return p_com_model_def->dev_side;
 }
@@ -140,7 +140,7 @@ void ComModelBle::com_model_disconnect( void * p_instance )
     p_com_model->disconnect( );
 }
 
-Communications_protocol::Devices ComModelBle::com_model_dev_side_get( void * p_instance )
+Devices ComModelBle::com_model_dev_side_get( void * p_instance )
 {
     ComModelBle * p_com_model = ( ComModelBle *)p_instance;
 

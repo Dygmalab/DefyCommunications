@@ -137,7 +137,7 @@ void ComModelWired::disconnect( void )
     p_spiPort = nullptr;
 }
 
-Communications_protocol::Devices ComModelWired::dev_side_get( void )
+Devices ComModelWired::dev_side_get( void )
 {
     return p_com_model_def->dev_side;
 }
@@ -174,7 +174,7 @@ void ComModelWired::com_model_disconnect( void * p_instance )
     p_com_model->disconnect( );
 }
 
-Communications_protocol::Devices ComModelWired::com_model_dev_side_get( void * p_instance )
+Devices ComModelWired::com_model_dev_side_get( void * p_instance )
 {
     ComModelWired * p_com_model = ( ComModelWired *)p_instance;
 

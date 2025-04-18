@@ -49,8 +49,8 @@ class ComModelBle
         {
             com_side_type_t side_type;
 
-            Communications_protocol::Devices    dev_side;
-            Communications_protocol::Devices    dev_neuron;
+            Devices    dev_side;
+            Devices    dev_neuron;
         } com_model_def_t;
 
     private:
@@ -77,7 +77,7 @@ class ComModelBle
         inline bool is_connected( void );
         inline void disconnect( void );
 
-        Communications_protocol::Devices dev_side_get( void );
+        Devices dev_side_get( void );
 
     private:
 
@@ -86,7 +86,7 @@ class ComModelBle
         static bool com_model_is_connected( void * p_instance );
         static void com_model_disconnect( void * p_instance );
 
-        static Communications_protocol::Devices com_model_dev_side_get( void * p_instance );
+        static Devices com_model_dev_side_get( void * p_instance );
 
         static const com_model_def_t p_com_model_def_array[];
         static const ComModel::com_model_if_t com_model_if;
