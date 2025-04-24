@@ -104,15 +104,21 @@ bool ComModelBle::send_packet( Packet &packet )
 {
     /* Check if the packet is intended for the peer in the ble communication model.
      * We accept the model's side Device and broadcast (Unknown) */
-    if( dev_side_is_valid( packet.header.device ) == false && packet.header.device != UNKNOWN )
-    {
-        //ASSERT_DYGMA( false, "Unexpected Send Packet device type" );
 
+    if( packet.header.device == UNKNOWN )
+    {
+        /* Set the ble model's Neuron Device */
+        packet.header.device = p_com_model_def->dev_neuron;
+    }
+    else if( dev_side_is_valid( packet.header.device ) == true )
+    {
+        /* We keep the side Device as it was set outside of this module */
+    }
+    else
+    {
+        /* The packet is not intended for the BLE communication model */
         return false;
     }
-
-    /* Set the ble model's Neuron Device */
-    packet.header.device = p_com_model_def->dev_neuron;
 
     return p_spiPort->sendPacket( packet );
 }

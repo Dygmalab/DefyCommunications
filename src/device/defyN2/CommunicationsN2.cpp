@@ -376,7 +376,7 @@ public:
         {
             case KEYSCANNER_DEFY_LEFT:
 //            case RF_DEFY_LEFT:
-//            case BLE_DEFY_LEFT:
+            case BLE_DEFY_LEFT:
 
                 /* Set the SPI COM left connectivity */
                 _com_spiPort_state_connected_set( p_com_spiPort, &comSideLeft );
@@ -385,7 +385,7 @@ public:
 
             case KEYSCANNER_DEFY_RIGHT:
 //            case RF_DEFY_RIGHT:
-//            case BLE_DEFY_RIGHT:
+            case BLE_DEFY_RIGHT:
 
                 /* Set the SPI COM right connectivity */
                 _com_spiPort_state_connected_set( p_com_spiPort, &comSideRight );
