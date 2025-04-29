@@ -34,6 +34,7 @@ ComSide::ComSide( com_side_type_t side_type )
 
     /* Communications */
     p_spiPort = nullptr;
+    p_rfPipe = nullptr;
     p_com_model = nullptr;
 
     com_model_wired_init( side_type );
@@ -57,6 +58,21 @@ void ComSide::ble_enable()
     ASSERT_DYGMA( rf_enabled == false, "The RF and BLE should not be enabled at the same time." );
 
     ble_enabled = true;
+    rf_enabled = false;
+
+    /* Request the reconnection */
+    reconnect_needed = true;
+}
+
+void ComSide::rf_enable( ComRfPipe * p_rfPipe )
+{
+    ASSERT_DYGMA( ble_enabled == false, "The RF and BLE should not be enabled at the same time." );
+
+    /* Register the RF pipe */
+    this->p_rfPipe = p_rfPipe;
+
+    ble_enabled = false;
+    rf_enabled = true;
 
     /* Request the reconnection */
     reconnect_needed = true;
@@ -79,9 +95,17 @@ void ComSide::com_model_wired_init( com_side_type_t side_type )
 
 void ComSide::com_model_rf_init( com_side_type_t side_type )
 {
-#warning "Needs to be implemented yet"
+    bool result;
 
-    com_model_rf.init( side_type );
+    ComModelRf::com_model_rf_config_t config;
+
+    config.side_type = side_type;
+    config.p_instance = this;
+    config.event_cb = com_model_event_cb;
+
+    result = com_model_rf.init( &config );
+
+    ASSERT_DYGMA( result == true, "com_model_rf.init failed" );
 }
 
 void ComSide::com_model_ble_init( com_side_type_t side_type )
@@ -115,6 +139,16 @@ bool ComSide::spi_is_connected( void )
     return p_spiPort->is_connected();
 }
 
+bool ComSide::rf_is_connected( void )
+{
+    if( p_rfPipe == nullptr )
+    {
+        return false;
+    }
+
+    return p_rfPipe->is_connected();
+}
+
 /******************************************************************/
 /*                         Communications                         */
 /******************************************************************/
@@ -129,6 +163,19 @@ inline void ComSide::com_wired_start( void )
 
     /* Set the communication mode and start the connection */
     mode = SIDE_MODE_WIRED;
+    state_set( SIDE_STATE_CONNECTION_START );
+}
+
+inline void ComSide::com_rf_start( void )
+{
+    /* Register the RF pipe to the RF communication model */
+    com_model_rf.rf_pipe_set( p_rfPipe );
+
+    /* Set the pointer to the communication model  */
+    p_com_model =  com_model_rf.com_model_get();
+
+    /* Set the communication mode and start the connection */
+    mode = SIDE_MODE_RF;
     state_set( SIDE_STATE_CONNECTION_START );
 }
 
@@ -250,6 +297,10 @@ inline void ComSide::state_disconnected_process( void )
             com_wired_start();
         }
     }
+    else if( rf_enabled == true && rf_is_connected() == true )
+    {
+        com_rf_start();
+    }
 }
 
 inline void ComSide::state_connection_start_process( void )
@@ -336,6 +387,14 @@ inline void ComSide::state_connected_process( void )
         state_set( SIDE_STATE_DISCONNECT );
         return;
     }
+    else if( mode == SIDE_MODE_RF && spi_is_connected() == true )
+    {
+        /*
+         * The Wired communication is prioritized. Hence we disconnect the RF mode now.
+         */
+        state_set( SIDE_STATE_DISCONNECT );
+        return;
+    }
     else if( reconnect_needed == true )
     {
         state_set_reconnect( );
@@ -372,7 +431,12 @@ inline void ComSide::state_disconnect_process( void )
     p_com_model->disconnect();
 
     /* Remove the SPI port */
-    p_spiPort = nullptr;
+    if( mode == SIDE_MODE_WIRED || mode == SIDE_MODE_BLE )
+    {
+        /* We nullify the spiPort only for the SPI-related modes. An existence of a valid and connected SPI port is a reason
+         * for switching from RF mode to the Wired one. Thus we must keep the SPI port available in such case. */
+        p_spiPort = nullptr;
+    }
 
     /* Remove the communication model */
     p_com_model = nullptr;

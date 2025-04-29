@@ -20,6 +20,7 @@
 #define __COMMUNICATIONS_SIDE_H_
 
 #include "Communications_protocol.h"
+#include "Communications_rf_pipe.h"
 #include "Communications_types.h"
 
 #include "Communication_model_wired.h"
@@ -37,11 +38,12 @@ class ComSide
 
 //        void init(void);
         void ble_enable();
+        void rf_enable( ComRfPipe * p_rfPipe );
 
         void spi_port_register( SpiPort * p_spiPort );
         bool spi_is_connected( void );
 
-
+        bool rf_is_connected( void );
 
 //        bool readPacket(Packet &packet);      /* NOTE: Packets are distributed via the Communications.callbacks.call from within the Side module */
         bool sendPacket(Packet &packet);
@@ -76,6 +78,7 @@ class ComSide
 
         /* Communications */
         SpiPort * p_spiPort;
+        ComRfPipe * p_rfPipe;
 
         ComModelWired com_model_wired;
         ComModelRf com_model_rf;
@@ -105,6 +108,7 @@ class ComSide
         inline void com_model_event_process( ComModel::com_model_event_t event );
 
         inline void com_wired_start( void );
+        inline void com_rf_start( void );
         inline void com_ble_start( void );
 
         inline bool com_packet_send( Packet &packet );
