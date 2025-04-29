@@ -19,7 +19,7 @@
 
 #ifdef NRF52_ARCH
 #include "Communications.h"
-#include "Communications_protocol_rf.h"
+#include "Communications_rf_pipe.h"
 #include "Communications_side.h"
 #include "SpiPort.h"
 #include "rf_host_device_api.h"
@@ -63,6 +63,8 @@ static SpiPort spiPort1(1);
 static SpiPort spiPort2(2);
 static ComSide comSideLeft( COM_SIDE_TYPE_KS_LEFT );
 static ComSide comSideRight( COM_SIDE_TYPE_KS_RIGHT );
+static ComRfPipe comRfPipeLeft( RFGW_PIPE_ID_KEYSCANNER_LEFT );
+static ComRfPipe comRfPipeRight( RFGW_PIPE_ID_KEYSCANNER_RIGHT );
 
 static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comSide = NULL };
 static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comSide = NULL };
@@ -119,21 +121,17 @@ class RFGWCommunications {
     NRF_LOG_DEBUG("Disconnected RF %lu", pipeId);
 #endif
 
-    RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
-    side.connected                 = false;
-    Packet packet{};
-    packet.header.command = Communications_protocol::DISCONNECTED;
-    packet.header.device  = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? RF_DEFY_RIGHT : RF_DEFY_LEFT;
-    Communications.callbacks.call(packet.header.command, packet);
+    ComRfPipe * p_rfPipe = ( pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ) ? &comRfPipeRight : &comRfPipeLeft;
 
-    while (!side.tx_messages.empty()) {
-      side.tx_messages.pop();
-    }
+    p_rfPipe->set_disconnected( );
+
   };
 
   static void cbPipeConnection(rfgw_pipe_id_t pipeId) {
-    RFGWCommunications::Side &side = pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ? right : left;
-    side.connected                 = true;
+
+    ComRfPipe * p_rfPipe = ( pipeId == RFGW_PIPE_ID_KEYSCANNER_RIGHT ) ? &comRfPipeRight : &comRfPipeLeft;
+
+    p_rfPipe->set_connected();
 
     new_connection_handle();
 
@@ -145,189 +143,15 @@ class RFGWCommunications {
   static void init() {
     rfgw_cb_pipe_disconnection_set(cbPipeDisconnection);
     rfgw_cb_pipe_connection_set(cbPipeConnection);
-
-    Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
-        p.header.size    = 0;
-        p.header.device  = p.header.device;
-        p.header.command = IS_ALIVE;
-        Communications.sendPacket(p);
-    });
   }
 
   static void run() {
     if (!kaleidoscope::plugin::RadioManager::isInited()) return;
     kaleidoscope::plugin::RadioManager::poll();
-    left.run();
-    right.run();
+    comRfPipeLeft.run();
+    comRfPipeRight.run();
   }
-
-  struct PacketQueue {
-      explicit PacketQueue(){}
-
-#define PACKET_QUEUE_SIZE       128
-
-      Communications_protocol_rf::WrapperPacket packets[PACKET_QUEUE_SIZE];
-
-      uint16_t read_pos = 0;
-      uint16_t write_pos = 0;
-      uint16_t packet_count = 0;
-
-      uint16_t size()
-      {
-          return packet_count;
-      }
-
-      bool empty()
-      {
-          return ( packet_count == 0 ) ? true : false;
-      }
-
-      bool full()
-      {
-          return ( packet_count >= (PACKET_QUEUE_SIZE - 1) ) ? true : false;
-      }
-
-      void pop()
-      {
-          if( empty() == true )
-          {
-              return;
-          }
-
-          packet_count--;
-          read_pos++;
-          if( read_pos >= PACKET_QUEUE_SIZE )
-          {
-              read_pos = 0;
-          }
-      }
-
-      void emplace( Packet &packet )
-      {
-          if( full() == true )
-          {
-              return;
-          }
-
-          packets[write_pos].packet = packet;
-
-          write_pos++;
-          if( write_pos >= PACKET_QUEUE_SIZE )
-          {
-              write_pos = 0;
-          }
-
-          packet_count++;
-      }
-
-      Communications_protocol_rf::WrapperPacket& front()
-      {
-          return packets[read_pos];
-      }
-  };
-
-  struct Side {
-    explicit Side(rfgw_pipe_id_t pipe)
-      : pipe_id(pipe) {}
-
-    void parseErrProcess(buffer_t *p_buffer) {
-      /*
-     * TODO: Possible parse error should be handled here by letting the upper layer know about the response failure
-     */
-
-      /* Initiate the search for new packet by skipping the first byte */
-      buffer_update_read_pos(p_buffer, 1);
-    }
-
-    void parseOkProcess(Communications_protocol_rf::parse_t *p_parse, buffer_t *p_buffer) {
-      if (p_parse->status_code == Communications_protocol_rf::PARSE_STATUS_SUCCESS) {
-        Communications.callbacks.call(p_parse->pkt_cmd, p_parse->wrapperPacket.packet);
-        /* Discard the already processed packet */
-        buffer_update_read_pos(p_buffer, p_parse->pkt_size);
-      } else /* Packet parse failed with clear status code */
-      {
-        /*
-         * TODO: Possible parse error should be handled here by letting the upper layer know about the response failure
-         */
-
-        parseErrProcess(p_buffer);
-      }
-    }
-
-    void parseProcess(void) {
-      result_t result = RESULT_ERR;
-      buffer_t *p_buffer_in;
-      Communications_protocol_rf::parse_t parse;
-
-      /* Get the buffer IN */
-      result = rfgw_pipe_recv_buffer_get(pipe_id, &p_buffer_in);
-      EXIT_IF_NOK(result);
-      //ASSERT_DYGMA(result == RESULT_OK, "rf_pipe_recv_buffer_get failed");
-
-      /* Parse and process the incoming data */
-      result = parseBuffer(&parse, p_buffer_in);
-
-      switch (result) {
-      case RESULT_OK:
-
-        parseOkProcess(&parse, p_buffer_in);
-
-        break;
-
-      case RESULT_ERR: /* Packet parse failed with un-clear status code */
-
-        parseErrProcess(p_buffer_in);
-
-        break;
-
-      default:
-
-        /*
-             * No or incomplete packet.
-             */
-
-        break;
-      }
-
-    _EXIT:
-      return;
-    }
-
-    void run() {
-      uint16_t pipe_send_loadsize = 0;
-      uint16_t pipe_recv_loadsize = 0;
-
-      rfgw_pipe_get_send_freesize(pipe_id, &pipe_send_loadsize);
-      rfgw_pipe_get_recv_loadsize(pipe_id, &pipe_recv_loadsize);
-      parseProcess();
-
-      if (!tx_messages.empty()) {
-        Communications_protocol_rf::WrapperPacket &packet = tx_messages.front();
-        uint16_t size_to_transfer                         = packet.getSize();
-        if (pipe_send_loadsize >= size_to_transfer) {
-          rfgw_pipe_send(pipe_id, packet.buf, size_to_transfer);
-          tx_messages.pop();
-        }
-      }
-    }
-
-    bool connected = false;
-    rfgw_pipe_id_t pipe_id;
-    PacketQueue tx_messages;
-    void sendPacket(Packet &packet) {
-      if (!kaleidoscope::plugin::RadioManager::isInited()) return;
-      packet.header.crc    = 0;
-      packet.header.device = Communications_protocol::RF_NEURON_DEFY;
-      packet.header.crc    = crc8(packet.buf, sizeof(Header) + packet.header.size);
-      tx_messages.emplace(packet);
-    };
-  };
-  static Side left;
-  static Side right;
 };
-
-RFGWCommunications::Side RFGWCommunications::left(RFGW_PIPE_ID_KEYSCANNER_LEFT);
-RFGWCommunications::Side RFGWCommunications::right(RFGW_PIPE_ID_KEYSCANNER_RIGHT);
 
 class WiredCommunications
 {
@@ -686,6 +510,9 @@ void connection_state_machine ()
                 if(!radioInited && !ble_innited())
                 {
                     kaleidoscope::plugin::RadioManager::init();
+
+                    comSideLeft.rf_enable( &comRfPipeLeft );
+                    comSideRight.rf_enable( &comRfPipeRight );
                 }
                 if (!ble_innited())
                 {
