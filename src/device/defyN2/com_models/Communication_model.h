@@ -40,6 +40,7 @@ class ComModel
         /* Low level area - called by the actual communication model for initialization */
         /* ******************************************************************************/
 
+        typedef bool (* com_model_msg_out_prepare_fn)( void * p_instance, Packet &packet );
         typedef bool (* com_model_send_packet_fn)( void * p_instance, Packet &packet );
         typedef bool (* com_model_read_packet_fn)( void * p_instance, Packet &packet );
         typedef bool (* com_model_is_connected_fn)( void * p_instance );
@@ -50,6 +51,7 @@ class ComModel
         /* Communication model interface */
         typedef struct
         {
+            com_model_msg_out_prepare_fn msg_out_prepare_fn;
             com_model_send_packet_fn send_packet_fn;
             com_model_read_packet_fn read_packet_fn;
             com_model_is_connected_fn is_connected_fn;
@@ -74,6 +76,7 @@ class ComModel
         /* High level area - abstracting the communication models to their actual use in the higher communication levels */
         /* ***************************************************************************************************************/
 
+        bool msg_out_prepare( Packet &packet );
         bool send_packet( Packet &packet );
         bool read_packet( Packet &packet );
         bool is_connected( void );

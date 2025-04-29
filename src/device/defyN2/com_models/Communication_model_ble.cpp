@@ -100,7 +100,7 @@ bool ComModelBle::dev_side_is_valid( Devices dev_side )
     return false;
 }
 
-bool ComModelBle::send_packet( Packet &packet )
+bool ComModelBle::msg_out_prepare( Packet &packet )
 {
     /* Check if the packet is intended for the peer in the ble communication model.
      * We accept the model's side Device and broadcast (Unknown) */
@@ -120,6 +120,11 @@ bool ComModelBle::send_packet( Packet &packet )
         return false;
     }
 
+    return true;
+}
+
+bool ComModelBle::send_packet( Packet &packet )
+{
     return p_spiPort->sendPacket( packet );
 }
 
@@ -174,6 +179,13 @@ Devices ComModelBle::dev_side_get( void )
 /*                     Communication model                    */
 /**************************************************************/
 
+bool ComModelBle::com_model_msg_out_prepare_fn( void * p_instance, Packet &packet )
+{
+    ComModelBle * p_com_model = ( ComModelBle *)p_instance;
+
+    return p_com_model->msg_out_prepare( packet );
+}
+
 bool ComModelBle::com_model_send_packet( void * p_instance, Packet &packet )
 {
     ComModelBle * p_com_model = ( ComModelBle *)p_instance;
@@ -211,6 +223,7 @@ Devices ComModelBle::com_model_dev_side_get( void * p_instance )
 
 const ComModel::com_model_if_t ComModelBle::com_model_if =
 {
+    .msg_out_prepare_fn = com_model_msg_out_prepare_fn,
     .send_packet_fn = com_model_send_packet,
     .read_packet_fn = com_model_read_packet,
     .is_connected_fn = com_model_is_connected,

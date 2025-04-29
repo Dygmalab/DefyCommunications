@@ -78,7 +78,7 @@ ComModel * ComModelWired::com_model_get()
     return &com_model;
 }
 
-bool ComModelWired::send_packet( Packet &packet )
+bool ComModelWired::msg_out_prepare( Packet &packet )
 {
     /* Check if the packet is intended for the peer in the wired communication model.
      * We accept the model's side Device and broadcast (Unknown) */
@@ -92,6 +92,11 @@ bool ComModelWired::send_packet( Packet &packet )
     /* Set the wired model's Neuron Device */
     packet.header.device = p_com_model_def->dev_neuron;
 
+    return true;
+}
+
+bool ComModelWired::send_packet( Packet &packet )
+{
     return p_spiPort->sendPacket( packet );
 }
 
@@ -146,6 +151,13 @@ Devices ComModelWired::dev_side_get( void )
 /*                     Communication model                    */
 /**************************************************************/
 
+bool ComModelWired::com_model_msg_out_prepare_fn( void * p_instance, Packet &packet )
+{
+    ComModelWired * p_com_model = ( ComModelWired *)p_instance;
+
+    return p_com_model->msg_out_prepare( packet );
+}
+
 bool ComModelWired::com_model_send_packet( void * p_instance, Packet &packet )
 {
     ComModelWired * p_com_model = ( ComModelWired *)p_instance;
@@ -183,6 +195,7 @@ Devices ComModelWired::com_model_dev_side_get( void * p_instance )
 
 const ComModel::com_model_if_t ComModelWired::com_model_if =
 {
+    .msg_out_prepare_fn = com_model_msg_out_prepare_fn,
     .send_packet_fn = com_model_send_packet,
     .read_packet_fn = com_model_read_packet,
     .is_connected_fn = com_model_is_connected,
