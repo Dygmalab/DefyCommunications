@@ -20,6 +20,7 @@
 #include "dl_middleware.h"
 #include "Communications.h"
 #include "Communications_side.h"
+#include "CRC_wrapper.h"
 
 #define CONNECT_WAIT_TIMEOUT_MS     100     /* Setting this shorter than KS IS_ALIVE wait (300 ms). This is for the case when the KS was already in the Connected state
                                                and sends its own IS_ALIVE message in response for the Neuron one. This way the Neuron repeated IS_ALIVE will reach
@@ -169,6 +170,50 @@ void ComSide::com_model_event_cb( void * p_instance, ComModel::com_model_event_t
     p_comSide->com_model_event_process( event );
 }
 
+bool ComSide::com_packet_send( Packet &packet )
+{
+    /* Prepare the message according to the communication model*/
+    if( p_com_model->msg_out_prepare( packet ) == false )
+    {
+        return false;
+    }
+
+    /* Calculate the CRC */
+    packet.header.crc = 0;
+    packet.header.crc = crc8( packet.buf, sizeof(Header) + packet.header.size );
+
+    /* Send the packet using the actual communication model */
+    return p_com_model->send_packet( packet );
+}
+
+bool ComSide::com_packet_read( Packet &packet )
+{
+    uint8_t crc_packet;
+    uint8_t crc_calc;
+
+    /* Prepare the message according to the communication model*/
+    if ( p_com_model->read_packet( packet ) == false )
+    {
+        return false;
+    }
+
+    /* Save the packet CRC */
+    crc_packet = packet.header.crc;
+
+    /* Calculate the CRC */
+    packet.header.crc = 0;
+    crc_calc = crc8( packet.buf, sizeof(Header) + packet.header.size );
+
+    /* Check the CRC */
+    if( crc_calc != crc_packet )
+    {
+        return false;
+    }
+
+    /* Packet is valid - return true */
+    return true;
+}
+
 inline void ComSide::state_set( side_state_t state )
 {
     this->state = state;
@@ -222,9 +267,9 @@ inline void ComSide::state_connection_start_process( void )
     packet_send.header.size    = 0;
     packet_send.header.command = IS_ALIVE;
 
-    if( p_com_model->send_packet( packet_send ) == false )
+    if( com_packet_send( packet_send ) == false )
     {
-        ASSERT_DYGMA( false, "Unexpected com_send_packet failure at this point" )
+        ASSERT_DYGMA( false, "Unexpected com_packet_send failure at this point" )
         return;
     }
 
@@ -252,7 +297,7 @@ inline void ComSide::state_connection_wait_process( void )
     }
 
     /* Try to read the packet */
-    if( p_com_model->read_packet( packet_read ) == false )
+    if( com_packet_read( packet_read ) == false )
     {
         return;
     }
@@ -268,9 +313,9 @@ inline void ComSide::state_connection_wait_process( void )
     //packet.header.device  = p.header.device;  /* The device is filled inside the send function */
     packet_send.header.command = CONNECTED;
 
-    if( p_com_model->send_packet( packet_send ) == false )
+    if( com_packet_send( packet_send ) == false )
     {
-        ASSERT_DYGMA( false, "Unexpected com_send_packet failure at this point" )
+        ASSERT_DYGMA( false, "Unexpected com_packet_send failure at this point" )
         return;
     }
 
@@ -298,7 +343,7 @@ inline void ComSide::state_connected_process( void )
     }
 
     /* Try to read the packet */
-    if( p_com_model->read_packet( packet_read ) == false )
+    if( com_packet_read( packet_read ) == false )
     {
         return;
     }
@@ -405,5 +450,5 @@ bool ComSide::sendPacket( Packet &packet )
     }
 
     /* Send the packet using the actual communication model */
-    return p_com_model->send_packet( packet_send );
+    return com_packet_send( packet_send );
 }

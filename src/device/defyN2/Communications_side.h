@@ -107,6 +107,9 @@ class ComSide
         inline void com_wired_start( void );
         inline void com_ble_start( void );
 
+        inline bool com_packet_send( Packet &packet );
+        inline bool com_packet_read( Packet &packet );
+
         inline void state_set( side_state_t state );
         inline void state_set_disconnected();
         inline void state_set_reconnect();
