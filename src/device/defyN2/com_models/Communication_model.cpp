@@ -26,16 +26,6 @@ bool ComModel::init( const com_model_config_t * p_config )
     return true;
 }
 
-bool ComModel::msg_out_prepare( Packet &packet )
-{
-    if( p_model_if->msg_out_prepare_fn == nullptr )
-    {
-        return false;
-    }
-
-    return p_model_if->msg_out_prepare_fn( p_instance, packet );
-}
-
 bool ComModel::send_packet( Packet &packet )
 {
     if( p_model_if->send_packet_fn == nullptr )

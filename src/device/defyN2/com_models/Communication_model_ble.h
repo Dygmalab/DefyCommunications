@@ -72,7 +72,6 @@ class ComModelBle
 
         inline void event_handler( ComModel::com_model_event_t event );
 
-        inline bool msg_out_prepare( Packet &packet );
         inline bool send_packet( Packet &packet );
         inline bool read_packet( Packet &packet );
         inline bool is_connected( void );
@@ -83,7 +82,6 @@ class ComModelBle
 
     private:
 
-        static bool com_model_msg_out_prepare_fn( void * p_instance, Packet &packet );
         static bool com_model_send_packet( void * p_instance, Packet &packet );
         static bool com_model_read_packet( void * p_instance, Packet &packet );
         static bool com_model_is_connected( void * p_instance );
