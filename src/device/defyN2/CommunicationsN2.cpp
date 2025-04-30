@@ -322,48 +322,6 @@ bool Communications::is_host_connected()
     return host_connected || ble_connected();
 }
 
-static void _set_wired_channel(Side _side)
-{
-    //TODO: change packet header to use NEURON_DEFY.
-}
-
-static void _set_rf_channel(Side _side)
-{
-    //TODO: change packet header to use RF_NEURON_DEFY.
-}
-
-static void _set_bt_channel(Side _side)
-{
-    // TODO: change packet header to use BLE_NEURON_2_DEFY.
-}
-
-void setup_communications_channel(bool isDefyLeftWired, bool isDefyRightWired)
-{
-    if(ble_innited()) // If the BLE is inited we will not set the channel. We already set it in the init function.
-    {
-        return;
-    }
-    // We will set the channel to the one we are using.
-    if (isDefyLeftWired && isDefyRightWired)
-    {
-        _set_wired_channel(Side::BOTH);
-    }
-    else if(isDefyLeftWired && !isDefyRightWired)
-    {
-        _set_wired_channel(Side::LEFT);
-        _set_rf_channel(Side::RIGHT);
-    }
-    else if(!isDefyLeftWired && isDefyRightWired)
-    {
-        _set_wired_channel(Side::RIGHT);
-        _set_rf_channel(Side::LEFT);
-    }
-    else
-    {
-        _set_rf_channel(Side::BOTH);
-    }
-}
-
 void connection_state_machine ()
 {
     //BLE STATUS
@@ -424,7 +382,6 @@ void connection_state_machine ()
 
             _BleManager.setForceBle(false);
 
-            _set_bt_channel(Side::BOTH);
 
             comSideLeft.ble_enable();
             comSideRight.ble_enable();
@@ -533,7 +490,6 @@ void connection_state_machine ()
         case Connection_status::CHECK_WIRED_OR_WIRELESS:
         {
             //NRF_LOG_INFO("CHECK WIRED OR WIRELESS");
-            setup_communications_channel(isDefyLeftWired, isDefyRightWired);
 
             if(FirmwareVersion.keyboard_is_wireless())
             {
