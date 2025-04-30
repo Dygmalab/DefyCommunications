@@ -91,6 +91,8 @@ void ComSide::com_model_wired_init( com_side_type_t side_type )
     result = com_model_wired.init( &config );
 
     ASSERT_DYGMA( result == true, "com_model_wired.init failed" );
+
+    UNUSED( result );
 }
 
 void ComSide::com_model_rf_init( com_side_type_t side_type )
@@ -106,6 +108,8 @@ void ComSide::com_model_rf_init( com_side_type_t side_type )
     result = com_model_rf.init( &config );
 
     ASSERT_DYGMA( result == true, "com_model_rf.init failed" );
+
+    UNUSED( result );
 }
 
 void ComSide::com_model_ble_init( com_side_type_t side_type )
@@ -121,6 +125,8 @@ void ComSide::com_model_ble_init( com_side_type_t side_type )
     result = com_model_ble.init( &config );
 
     ASSERT_DYGMA( result == true, "com_model_ble.init failed" );
+
+    UNUSED( result );
 }
 
 

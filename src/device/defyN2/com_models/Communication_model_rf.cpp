@@ -56,6 +56,16 @@ bool ComModelRf::init( com_model_rf_config_t * p_config )
     return true;
 }
 
+void ComModelRf::event_handler( ComModel::com_model_event_t event )
+{
+    if( event_cb == nullptr )
+    {
+        return;
+    }
+
+    event_cb( p_instance, event );
+}
+
 void ComModelRf::rf_pipe_set( ComRfPipe * p_rfPipe )
 {
     this->p_rfPipe = p_rfPipe;
