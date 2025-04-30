@@ -18,6 +18,7 @@
 #include "Communications.h"
 #include "Communications_protocol_rf.h"
 #include "Communications_rf_pipe.h"
+#include "CRC_wrapper.h"
 
 /*****************************************************************/
 /*                         Packet Queues                         */
@@ -221,11 +222,8 @@ bool ComRfPipe::sendPacket( Packet & packet )
         return false;
     }
 
-//    if ( !kaleidoscope::plugin::RadioManager::isInited( ) )
-//        return;
-//    packet.header.crc = 0;
-//    packet.header.device = Communications_protocol::RF_NEURON_DEFY;
-//    packet.header.crc = crc8( packet.buf, sizeof(Header) + packet.header.size );
+    packet.header.crc = 0;
+    packet.header.crc = crc8( packet.buf, sizeof(Header) + packet.header.size );
 
     return tx_messages.emplace( packet );
 }
