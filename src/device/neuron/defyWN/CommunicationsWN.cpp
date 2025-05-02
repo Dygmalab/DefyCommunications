@@ -54,6 +54,9 @@ enum class Connection_status
 
 bool mode_led_requested = false;
 
+//HOST CONNECTION
+static bool host_connected = false;
+
 void connection_state_machine ();
 
 /****************************************************************** */
@@ -286,20 +289,14 @@ bool check_usb_connection()
     return  tud_ready();
 }
 
-static void send_host_connection(bool connected)
+bool Communications::is_host_connected()
 {
-    Communications_protocol::Packet packet{};
-    packet.header.command = Communications_protocol::HOST_CONNECTION;
-    packet.header.size    = 2;
-    packet.data[0]        = connected;
-    Communications.sendPacket(packet);
-    //**************************************
+    return host_connected;
 }
 
 void connection_state_machine ()
 {
     //HOST CONNECTION
-    static bool host_connected = false;
     static bool prev_host_connected = true;
     static uint32_t last_host_connection_check = 0;
 
@@ -364,7 +361,7 @@ void connection_state_machine ()
             }
 
             //Send the connected message to the KS
-            send_host_connection(host_connected);
+            Communications.sendPacketHostConnection( );
 
             prev_host_connected = host_connected;
             host_connection_requested = false;
@@ -378,6 +375,18 @@ void connection_state_machine ()
 
 
     }
+}
+
+bool Communications::sendPacketHostConnection( void )
+{
+    Communications_protocol::Packet packet{};
+
+    packet.header.command = Communications_protocol::HOST_CONNECTION;
+    packet.header.size    = 2;
+    packet.data[0]        = host_connected;
+    packet.data[1]        = false;
+
+    return sendPacket(packet);
 }
 
 class Communications Communications;
