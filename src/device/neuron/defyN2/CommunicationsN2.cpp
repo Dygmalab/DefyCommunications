@@ -20,7 +20,7 @@
 #ifdef NRF52_ARCH
 #include "Communications.h"
 #include "Communications_rf_pipe.h"
-#include "Communications_side.h"
+#include "CommunicationsN2_side.h"
 #include "SpiPort.h"
 #include "rf_host_device_api.h"
 #include "CRC_wrapper.h"
@@ -56,18 +56,18 @@ typedef struct
     com_spiPort_state_t state;
 
     SpiPort * p_spiPort;
-    ComSide * p_comSide;
+    ComN2Side * p_comN2Side;
 } com_spiPort_t;
 
 static SpiPort spiPort1(1);
 static SpiPort spiPort2(2);
-static ComSide comSideLeft( COM_SIDE_TYPE_KS_LEFT );
-static ComSide comSideRight( COM_SIDE_TYPE_KS_RIGHT );
+static ComN2Side comN2SideLeft( COM_SIDE_TYPE_KS_LEFT );
+static ComN2Side comN2SideRight( COM_SIDE_TYPE_KS_RIGHT );
 static ComRfPipe comRfPipeLeft( RFGW_PIPE_ID_KEYSCANNER_LEFT );
 static ComRfPipe comRfPipeRight( RFGW_PIPE_ID_KEYSCANNER_RIGHT );
 
-static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comSide = NULL };
-static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comSide = NULL };
+static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comN2Side = NULL };
+static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comN2Side = NULL };
 
 static bool host_connection_requested = false;
 
@@ -167,10 +167,10 @@ public:
         p_com_spiPort->state = state;
     }
 
-    static void _com_spiPort_state_connected_set( com_spiPort_t * p_com_spiPort, ComSide * p_comSide )
+    static void _com_spiPort_state_connected_set( com_spiPort_t * p_com_spiPort, ComN2Side * p_comN2Side )
     {
-        p_com_spiPort->p_comSide = p_comSide;
-        p_com_spiPort->p_comSide->spi_port_register( p_com_spiPort->p_spiPort );
+        p_com_spiPort->p_comN2Side = p_comN2Side;
+        p_com_spiPort->p_comN2Side->spi_port_register( p_com_spiPort->p_spiPort );
 
         _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_CONNECTED );
 
@@ -203,7 +203,7 @@ public:
             case BLE_DEFY_LEFT:
 
                 /* Set the SPI COM left connectivity */
-                _com_spiPort_state_connected_set( p_com_spiPort, &comSideLeft );
+                _com_spiPort_state_connected_set( p_com_spiPort, &comN2SideLeft );
 
                 break;
 
@@ -212,7 +212,7 @@ public:
             case BLE_DEFY_RIGHT:
 
                 /* Set the SPI COM right connectivity */
-                _com_spiPort_state_connected_set( p_com_spiPort, &comSideRight );
+                _com_spiPort_state_connected_set( p_com_spiPort, &comN2SideRight );
 
                 break;
 
@@ -227,14 +227,14 @@ public:
     static void _com_spiPort_state_connected_process( com_spiPort_t * p_com_spiPort )
     {
         /* Check whether the Side is still connected over wire */
-        if( p_com_spiPort->p_comSide->spi_is_connected() == true )
+        if( p_com_spiPort->p_comN2Side->spi_is_connected() == true )
         {
             return;
         }
 
         /* The side is disconnected over wire */
 
-        p_com_spiPort->p_comSide = nullptr;
+        p_com_spiPort->p_comN2Side = nullptr;
         _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_DISCONNECTED );
     }
 
@@ -383,8 +383,8 @@ void connection_state_machine ()
             _BleManager.setForceBle(false);
 
 
-            comSideLeft.ble_enable();
-            comSideRight.ble_enable();
+            comN2SideLeft.ble_enable();
+            comN2SideRight.ble_enable();
 
             ble_denied = false; //We will restart the BLE denied flag when we connect to BT due to the press of the pairing key. This will allow the BLE to be enabled again if the Neuron is disconnected.
 
@@ -468,8 +468,8 @@ void connection_state_machine ()
                 {
                     kaleidoscope::plugin::RadioManager::init();
 
-                    comSideLeft.rf_enable( &comRfPipeLeft );
-                    comSideRight.rf_enable( &comRfPipeRight );
+                    comN2SideLeft.rf_enable( &comRfPipeLeft );
+                    comN2SideRight.rf_enable( &comRfPipeRight );
                 }
                 if (!ble_innited())
                 {
@@ -609,33 +609,33 @@ void Communications::run()
   RFGWCommunications::run();
   connection_state_machine();
 
-  comSideLeft.run();
-  comSideRight.run();
+  comN2SideLeft.run();
+  comN2SideRight.run();
 }
 
 bool Communications::isWiredLeftAlive()
 {
-  return comSideLeft.spi_is_connected();
+  return comN2SideLeft.spi_is_connected();
 }
 
 bool Communications::isWiredRightAlive()
 {
-  return comSideRight.spi_is_connected();
+  return comN2SideRight.spi_is_connected();
 }
 
 bool Communications::sendPacket(Packet packet)
 {
     bool result = false;
 
-    /* We route the packet both comSide modules. They will decide if they send the packet or not.
+    /* We route the packet both comN2Side modules. They will decide if they send the packet or not.
      * The result is true if any of the sides has processed the packet. */
 
-    if( comSideLeft.sendPacket( packet ) == true )
+    if( comN2SideLeft.sendPacket( packet ) == true )
     {
         result = true;
     }
 
-    if( comSideRight.sendPacket( packet ) == true )
+    if( comN2SideRight.sendPacket( packet ) == true )
     {
         result = true;
     }
