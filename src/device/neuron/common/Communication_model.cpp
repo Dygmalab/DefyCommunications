@@ -26,6 +26,16 @@ bool ComModel::init( const com_model_config_t * p_config )
     return true;
 }
 
+void ComModel::event_cb_config( const com_model_event_cb_config_t * p_event_cb_config )
+{
+    if( p_model_if->event_cb_config_fn == nullptr )
+    {
+        return;
+    }
+
+    return p_model_if->event_cb_config_fn( p_instance, p_event_cb_config );
+}
+
 bool ComModel::send_packet( Packet &packet )
 {
     if( p_model_if->send_packet_fn == nullptr )

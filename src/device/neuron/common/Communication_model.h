@@ -34,11 +34,19 @@ class ComModel
 
         typedef void (* com_model_event_cb)( void * p_instance, com_model_event_t event );
 
+        typedef struct
+        {
+            void * p_instance;
+            com_model_event_cb event_cb;
+        } com_model_event_cb_config_t;
+
     public:
 
         /* ******************************************************************************/
         /* Low level area - called by the actual communication model for initialization */
         /* ******************************************************************************/
+
+        typedef void (* com_model_event_cb_config_fn)( void * p_instance, const com_model_event_cb_config_t * p_event_cb_config );
 
         typedef bool (* com_model_send_packet_fn)( void * p_instance, Packet &packet );
         typedef bool (* com_model_read_packet_fn)( void * p_instance, Packet &packet );
@@ -50,6 +58,8 @@ class ComModel
         /* Communication model interface */
         typedef struct
         {
+            com_model_event_cb_config_fn event_cb_config_fn;
+
             com_model_send_packet_fn send_packet_fn;
             com_model_read_packet_fn read_packet_fn;
             com_model_is_connected_fn is_connected_fn;
@@ -73,6 +83,8 @@ class ComModel
         /* ***************************************************************************************************************/
         /* High level area - abstracting the communication models to their actual use in the higher communication levels */
         /* ***************************************************************************************************************/
+
+        void event_cb_config( const com_model_event_cb_config_t * p_event_cb_config );
 
         bool send_packet( Packet &packet );
         bool read_packet( Packet &packet );
