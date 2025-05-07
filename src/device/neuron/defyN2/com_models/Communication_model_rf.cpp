@@ -43,9 +43,9 @@ bool ComModelRf::init( com_model_rf_config_t * p_config )
     get_com_model_def( p_com_model_def, p_config->side_type );
     ASSERT_DYGMA( p_com_model_def != NULL, "Invalid COM Side type detected" );
 
-    /* Save the event handler */
-    p_instance = p_config->p_instance;
-    event_cb = p_config->event_cb;
+    /* Initialize the event handler */
+    p_instance = nullptr;
+    event_cb = nullptr;
 
     /* Initialize the communication model */
     if( com_model_init() == false )
@@ -74,6 +74,12 @@ void ComModelRf::rf_pipe_set( ComRfPipe * p_rfPipe )
 ComModel * ComModelRf::com_model_get()
 {
     return &com_model;
+}
+
+void ComModelRf::event_cb_config( const ComModel::com_model_event_cb_config_t * p_event_cb_config )
+{
+    this->p_instance = p_event_cb_config->p_instance;
+    this->event_cb = p_event_cb_config->event_cb;
 }
 
 bool ComModelRf::send_packet( Packet &packet )
@@ -144,6 +150,13 @@ Devices ComModelRf::dev_side_get( void )
 /*                     Communication model                    */
 /**************************************************************/
 
+void ComModelRf::com_model_event_cb_config_fn( void * p_instance, const ComModel::com_model_event_cb_config_t * p_event_cb_config )
+{
+    ComModelRf * p_com_model = ( ComModelRf *)p_instance;
+
+    return p_com_model->event_cb_config( p_event_cb_config );
+}
+
 bool ComModelRf::com_model_send_packet( void * p_instance, Packet &packet )
 {
     ComModelRf * p_com_model = ( ComModelRf *)p_instance;
@@ -181,6 +194,7 @@ Devices ComModelRf::com_model_dev_side_get( void * p_instance )
 
 const ComModel::com_model_if_t ComModelRf::com_model_if =
 {
+    .event_cb_config_fn = com_model_event_cb_config_fn,
     .send_packet_fn = com_model_send_packet,
     .read_packet_fn = com_model_read_packet,
     .is_connected_fn = com_model_is_connected,

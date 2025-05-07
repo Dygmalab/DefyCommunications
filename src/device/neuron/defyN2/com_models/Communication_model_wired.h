@@ -32,10 +32,6 @@ class ComModelWired
         typedef struct
         {
             com_side_type_t side_type;
-
-            /* Events */
-            void * p_instance;
-            ComModel::com_model_event_cb event_cb;
         } com_model_wired_config_t;
 
         bool init( com_model_wired_config_t * p_config );
@@ -72,6 +68,7 @@ class ComModelWired
 
         inline void event_handler( ComModel::com_model_event_t event );
 
+        inline void event_cb_config( const ComModel::com_model_event_cb_config_t * p_event_cb_config );
         inline bool send_packet( Packet &packet );
         inline bool read_packet( Packet &packet );
         inline bool is_connected( void );
@@ -81,6 +78,7 @@ class ComModelWired
 
     private:
 
+        static void com_model_event_cb_config_fn( void * p_instance, const ComModel::com_model_event_cb_config_t * p_event_cb_config );
         static bool com_model_send_packet( void * p_instance, Packet &packet );
         static bool com_model_read_packet( void * p_instance, Packet &packet );
         static bool com_model_is_connected( void * p_instance );
