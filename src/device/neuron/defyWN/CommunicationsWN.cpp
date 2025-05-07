@@ -20,6 +20,7 @@
 #ifdef ARDUINO_ARCH_RP2040
 
 #include "Communications.h"
+#include "CommunicationsWN_side.h"
 #include "SpiPort.h"
 #include "kaleidoscope/plugin/LEDControl.h"
 #include <kaleidoscope.h>
@@ -33,14 +34,27 @@
 
 #define USB_CONNECTION_MARGIN          100
 
+typedef enum
+{
+    COM_SPIPORT_STATE_DISCONNECTED = 1,
+    COM_SPIPORT_STATE_CONNECTED,
+} com_spiPort_state_t;
+
+typedef struct
+{
+    com_spiPort_state_t state;
+
+    SpiPort * p_spiPort;
+    ComWNSide * p_comWNSide;
+} com_spiPort_t;
 
 static SpiPort spiPort1(0);
-static Devices spiPort1Device{Communications_protocol::UNKNOWN};
-static uint32_t spiPort1LastCommunication{0};
-
 static SpiPort spiPort2(1);
-static Devices spiPort2Device{Communications_protocol::UNKNOWN};
-static uint32_t spiPort2LastCommunication{0};
+static ComWNSide comWNSideLeft( COM_SIDE_TYPE_KS_LEFT );
+static ComWNSide comWNSideRight( COM_SIDE_TYPE_KS_RIGHT );
+
+static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comWNSide = NULL };
+static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comWNSide = NULL };
 
 static bool host_connection_requested = false;
 
@@ -57,7 +71,6 @@ bool mode_led_requested = false;
 //HOST CONNECTION
 static bool host_connected = false;
 
-void connection_state_machine ();
 
 /****************************************************************** */
 
@@ -84,142 +97,120 @@ void new_connection_handle(void)
 
 /****************************************************************** */
 
-
-class WiredCommunications {
- public:
-  static void init() 
-  {
-    spiPort1.init();
-    spiPort2.init();
-
-    Communications.callbacks.bind(IS_ALIVE, [](Packet p) {
-        p.header.size    = 0;
-        p.header.device  = p.header.device;
-        p.header.command = IS_ALIVE;
-        Communications.sendPacket(p);
-    });
-  }
-
-  static void readPacket(uint8_t port) 
-  {
-    SpiPort &spiPort             = port == 0 ? spiPort1 : spiPort2;
-    Devices &device              = port == 0 ? spiPort1Device : spiPort2Device;
-    uint32_t &lastCommunications = port == 0 ? spiPort1LastCommunication : spiPort2LastCommunication;
-    Packet packet{};
-    
-    if (spiPort.readPacket(packet)) 
+class WiredCommunications
+{
+public:
+    static void init()
     {
-      lastCommunications = millis();
-      device             = packet.header.device;
-      Communications.callbacks.call(packet.header.command, packet);
-    }
-  }
-
-  static bool isPortAlive(uint8_t port) {
-    uint32_t &lastCommunications = port == 0 ? spiPort1LastCommunication : spiPort2LastCommunication;
-
-    /* Check if there was any communication at all */
-    if (lastCommunications == 0) {
-      return false;
+        spiPort1.init( );
+        spiPort2.init( );
     }
 
-    /* Check how long it is since the last communication */
-    return ((millis() - lastCommunications) < PORT_IS_ALIVE_TIMEOUT_MS) ? true : false;
-  }
-
-  static bool isPortLeftAlive(void) {
-    if (spiPort1Device == KEYSCANNER_DEFY_LEFT) {
-      return isPortAlive(0);
-    } else if (spiPort2Device == KEYSCANNER_DEFY_LEFT) {
-      return isPortAlive(1);
-    } else {
-      return false;
+    static inline void _com_spiPort_state_set( com_spiPort_t * p_com_spiPort, com_spiPort_state_t state )
+    {
+        p_com_spiPort->state = state;
     }
-  }
 
-  static bool isPortRightAlive(void) {
-    if (spiPort1Device == KEYSCANNER_DEFY_RIGHT) {
-      return isPortAlive(0);
-    } else if (spiPort2Device == KEYSCANNER_DEFY_RIGHT) {
-      return isPortAlive(1);
-    } else {
-      return false;
+    static void _com_spiPort_state_connected_set( com_spiPort_t * p_com_spiPort, ComWNSide * p_comWNSide )
+    {
+        p_com_spiPort->p_comWNSide = p_comWNSide;
+        p_com_spiPort->p_comWNSide->spi_port_register( p_com_spiPort->p_spiPort );
+
+        _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_CONNECTED );
+
+        new_connection_handle( );
     }
-  }
 
-  static void disconnect(uint8_t port) {
-    SpiPort &spiPort = port == 0 ? spiPort1 : spiPort2;
-    Devices &device  = port == 0 ? spiPort1Device : spiPort2Device;
-    Packet packet{};
+    static void _com_spiPort_state_disconnected_process( com_spiPort_t * p_com_spiPort )
+    {
+        Packet packet{};
 
-    packet.header.command = Communications_protocol::DISCONNECTED;
-    packet.header.device  = device;
-    Communications.callbacks.call(packet.header.command, packet);
-    device = UNKNOWN;
-    //Remove all the left packets at disconnections
-    spiPort.clearRead();
-    spiPort.clearSend();
-  }
+        /* Check whether the SPI port is connected to a side */
+        if( p_com_spiPort->p_spiPort->is_connected() == false )
+        {
+            /* The SPI port is not connected */
+            return;
+        }
 
-  static void portRun(uint8_t port) {
-    SpiPort &spiPort = port == 0 ? spiPort1 : spiPort2;
+        /* The SPI port is connected - check which side it is */
 
-    spiPort.run();
-  }
+        if ( p_com_spiPort->p_spiPort->peekPacket( packet ) == false )
+        {
+            /* No packet in the buffer */
+            return;
+        }
 
-  static bool portIsConnected(uint8_t port) {
-      SpiPort &spiPort = port == 0 ? spiPort1 : spiPort2;
+        switch( packet.header.device )
+        {
+            case KEYSCANNER_DEFY_LEFT:
 
-      return spiPort.is_connected();
-  }
+                /* Set the SPI COM left connectivity */
+                _com_spiPort_state_connected_set( p_com_spiPort, &comWNSideLeft );
 
-  static void run() {
+                break;
 
-    /**********************/
-    /*     Left side      */
-    /**********************/
-    static bool wasLeftConnected = false;
-    auto isDefyLeftWired   = portIsConnected(0);
+            case KEYSCANNER_DEFY_RIGHT:
 
-    if(!wasLeftConnected && isDefyLeftWired) {
-      new_connection_handle();
+                /* Set the SPI COM right connectivity */
+                _com_spiPort_state_connected_set( p_com_spiPort, &comWNSideRight );
+
+                break;
+
+            default:
+
+                ASSERT_DYGMA( false, "Unexpected SPI packet Device type" );
+
+                break;
+        }
     }
-    portRun(0);
-    if (isDefyLeftWired) {
-      readPacket(0);
-    }
-    if (wasLeftConnected && !isDefyLeftWired) {
-      disconnect(0);
-    }
-    wasLeftConnected = isDefyLeftWired;
 
-    /**********************/
-    /*     Right side     */
-    /**********************/
-    static bool wasRightConnected = false;
-    auto isDefyRightWired = portIsConnected(1);
+    static void _com_spiPort_state_connected_process( com_spiPort_t * p_com_spiPort )
+    {
+        /* Check whether the Side is still connected over wire */
+        if( p_com_spiPort->p_comWNSide->spi_is_connected() == true )
+        {
+            return;
+        }
 
-    if(!wasRightConnected && isDefyRightWired) {
-      new_connection_handle();
+        /* The side is disconnected over wire */
+
+        p_com_spiPort->p_comWNSide = nullptr;
+        _com_spiPort_state_set( p_com_spiPort, COM_SPIPORT_STATE_DISCONNECTED );
     }
-    portRun(1);
-    if (isDefyRightWired) {
-      readPacket(1);
+
+    static void com_spiPort_machine( com_spiPort_t * p_com_spiPort )
+    {
+        /* Run the spi port */
+        p_com_spiPort->p_spiPort->run();
+
+        switch( p_com_spiPort->state )
+        {
+            case COM_SPIPORT_STATE_DISCONNECTED:
+
+                _com_spiPort_state_disconnected_process( p_com_spiPort );
+
+                break;
+
+            case COM_SPIPORT_STATE_CONNECTED:
+
+                _com_spiPort_state_connected_process( p_com_spiPort );
+
+                break;
+        }
     }
-    if (wasRightConnected && !isDefyRightWired) {
-      disconnect(1);
+
+    static void run()
+    {
+        com_spiPort_machine( &com_spiPort1 );
+        com_spiPort_machine( &com_spiPort2 );
     }
-    wasRightConnected = isDefyRightWired;
-  }
 };
 
 void Communications::init() {
 
   callbacks.bind(CONNECTED, [this](Packet p) {
-    p.header.size    = 0;
-    p.header.device  = p.header.device;
-    p.header.command = CONNECTED;
-    sendPacket(p);
+      /* Send the Host connection info */
+      sendPacketHostConnection( );
   });
 
   callbacks.bind(HOST_CONNECTION_STATUS, [](Packet p) {
@@ -233,50 +224,6 @@ void Communications::init() {
   });
 
   WiredCommunications::init();
-}
-
-void Communications::run() {
-
-  WiredCommunications::run();
-  connection_state_machine();
-}
-
-bool Communications::sendPacket(Packet packet) {
-  Devices device_to_send = packet.header.device;
-
-  if (device_to_send == UNKNOWN) {
-
-    if (spiPort1Device != UNKNOWN) {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      spiPort1.sendPacket(packet);
-    }
-
-    if (spiPort2Device != UNKNOWN) {
-      packet.header.device = Communications_protocol::NEURON_DEFY;
-      spiPort2.sendPacket(packet);
-    }
-    return true;
-  }
-
-  if (spiPort1Device == device_to_send) {
-    packet.header.device = Communications_protocol::NEURON_DEFY;
-    spiPort1.sendPacket(packet);
-  }
-
-  if (spiPort2Device == device_to_send) {
-    packet.header.device = Communications_protocol::NEURON_DEFY;
-    spiPort2.sendPacket(packet);
-  }
-
-  return true;
-}
-
-bool Communications::isWiredLeftAlive() {
-  return WiredCommunications::isPortLeftAlive();
-}
-
-bool Communications::isWiredRightAlive() {
-  return WiredCommunications::isPortRightAlive();
 }
 
 /*
@@ -377,6 +324,45 @@ void connection_state_machine ()
     }
 }
 
+void Communications::run() {
+
+  WiredCommunications::run();
+  connection_state_machine();
+
+  comWNSideLeft.run();
+  comWNSideRight.run();
+}
+
+bool Communications::isWiredLeftAlive() {
+    return comWNSideLeft.spi_is_connected();
+}
+
+bool Communications::isWiredRightAlive() {
+    return comWNSideRight.spi_is_connected();
+}
+
+bool Communications::sendPacket(Packet packet)
+{
+    bool result = false;
+
+    /* We route the packet both comWNSide modules. They will decide if they send the packet or not.
+     * The result is true if any of the sides has processed the packet. */
+
+    if( comWNSideLeft.sendPacket( packet ) == true )
+    {
+        result = true;
+    }
+
+    if( comWNSideRight.sendPacket( packet ) == true )
+    {
+        result = true;
+    }
+
+    return result;
+
+  return true;
+}
+
 bool Communications::sendPacketHostConnection( void )
 {
     Communications_protocol::Packet packet{};
@@ -392,3 +378,4 @@ bool Communications::sendPacketHostConnection( void )
 class Communications Communications;
 
 #endif
+
