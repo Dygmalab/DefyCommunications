@@ -19,48 +19,28 @@
 #ifndef __COMMUNICATIONS_SIDE_H_
 #define __COMMUNICATIONS_SIDE_H_
 
-#include "Communications_protocol.h"
-#include "Communications_rf_pipe.h"
-#include "Communications_types.h"
+#include "Communication_model.h"
 
-#include "Communication_model_wired.h"
-#include "Communication_model_rf.h"
-#include "Communication_model_ble.h"
-
-#include "SpiPort.h"
 #include "Time_counter.h"
 
 class ComSide
 {
+
     public:
 
-        ComSide( com_side_type_t side_type );
+        bool init( void );
 
-//        void init(void);
-        void ble_enable();
-        void rf_enable( ComRfPipe * p_rfPipe );
+        bool connect( ComModel * p_com_model );     /* Will start the connection handshake process */
+        void disconnect( void );                    /* Will request the disconnect process */
 
-        void spi_port_register( SpiPort * p_spiPort );
-        bool spi_is_connected( void );
+        bool is_connected( void );
+        bool is_disconnected( void );
 
-        bool rf_is_connected( void );
-
-//        bool readPacket(Packet &packet);      /* NOTE: Packets are distributed via the Communications.callbacks.call from within the Side module */
         bool sendPacket(Packet &packet);
 
         void run(void);
 
     private:
-
-        typedef enum
-        {
-            SIDE_MODE_UNKNOWN = 1,
-
-            SIDE_MODE_WIRED,
-            SIDE_MODE_RF,
-            SIDE_MODE_BLE,
-
-        } side_mode_t;
 
         typedef enum
         {
@@ -73,47 +53,27 @@ class ComSide
 
     private:
 
-        /* Side definition */
-        com_side_type_t side_type;
-
-        /* Communications */
-        SpiPort * p_spiPort;
-        ComRfPipe * p_rfPipe;
-
-        ComModelWired com_model_wired;
-        ComModelRf com_model_rf;
-        ComModelBle com_model_ble;
-
         ComModel * p_com_model;
 
         /* Side state */
         side_state_t state;
-        side_mode_t mode;
 
         /* Flags */
-        bool wired_enabled;
-        bool rf_enabled;
-        bool ble_enabled;
-
-        bool reconnect_needed;
+        bool disconnect_request;
+        bool reconnect_request;
 
         /* Timers */
         dl_timer_t connection_timer;
 
-        /* Prototypes */
-        inline void com_model_wired_init( com_side_type_t side_type );
-        inline void com_model_rf_init( com_side_type_t side_type );
-        inline void com_model_ble_init( com_side_type_t side_type );
-
         inline void com_model_event_process( ComModel::com_model_event_t event );
 
-        inline void com_wired_start( void );
-        inline void com_rf_start( void );
-        inline void com_ble_start( void );
+        inline bool com_model_is_connected( void );
+        inline void com_model_start( void );
+
+        inline bool disconnect_needed( void );
 
         inline void state_set( side_state_t state );
-        inline void state_set_disconnected();
-        inline void state_set_reconnect();
+        inline void state_set_disconnected( void );
 
         inline void state_disconnected_process( void );
         inline void state_connection_start_process( void );

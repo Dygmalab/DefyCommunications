@@ -25,177 +25,24 @@
                                                and sends its own IS_ALIVE message in response for the Neuron one. This way the Neuron repeated IS_ALIVE will reach
                                                KS side before it retries on its side */
 
-
-ComSide::ComSide( com_side_type_t side_type )
+bool ComSide::init( void )
 {
-    /* Side definition */
-    this->side_type = side_type;
-
     /* Communications */
-    p_spiPort = nullptr;
-    p_rfPipe = nullptr;
     p_com_model = nullptr;
 
-    com_model_wired_init( side_type );
-    com_model_rf_init( side_type );
-    com_model_ble_init( side_type );
-
     /* Side state */
-    mode = SIDE_MODE_UNKNOWN;
     state = SIDE_STATE_DISCONNECTED;
 
     /* Flags */
-    wired_enabled = true;     /* In general, Wired is currently always enabled */
-    rf_enabled = false;
-    ble_enabled = false;
+    disconnect_request = false;
+    reconnect_request = false;
 
-    reconnect_needed = false;
-}
-
-void ComSide::ble_enable()
-{
-    ASSERT_DYGMA( rf_enabled == false, "The RF and BLE should not be enabled at the same time." );
-
-    ble_enabled = true;
-    rf_enabled = false;
-
-    /* Request the reconnection */
-    reconnect_needed = true;
-}
-
-void ComSide::rf_enable( ComRfPipe * p_rfPipe )
-{
-    ASSERT_DYGMA( ble_enabled == false, "The RF and BLE should not be enabled at the same time." );
-
-    /* Register the RF pipe */
-    this->p_rfPipe = p_rfPipe;
-
-    ble_enabled = false;
-    rf_enabled = true;
-
-    /* Request the reconnection */
-    reconnect_needed = true;
-}
-
-void ComSide::com_model_wired_init( com_side_type_t side_type )
-{
-    bool result;
-
-    ComModelWired::com_model_wired_config_t config;
-
-    config.side_type = side_type;
-    config.p_instance = this;
-    config.event_cb = com_model_event_cb;
-
-    result = com_model_wired.init( &config );
-
-    ASSERT_DYGMA( result == true, "com_model_wired.init failed" );
-
-    UNUSED( result );
-}
-
-void ComSide::com_model_rf_init( com_side_type_t side_type )
-{
-    bool result;
-
-    ComModelRf::com_model_rf_config_t config;
-
-    config.side_type = side_type;
-    config.p_instance = this;
-    config.event_cb = com_model_event_cb;
-
-    result = com_model_rf.init( &config );
-
-    ASSERT_DYGMA( result == true, "com_model_rf.init failed" );
-
-    UNUSED( result );
-}
-
-void ComSide::com_model_ble_init( com_side_type_t side_type )
-{
-    bool result;
-
-    ComModelBle::com_model_ble_config_t config;
-
-    config.side_type = side_type;
-    config.p_instance = this;
-    config.event_cb = com_model_event_cb;
-
-    result = com_model_ble.init( &config );
-
-    ASSERT_DYGMA( result == true, "com_model_ble.init failed" );
-
-    UNUSED( result );
-}
-
-
-void ComSide::spi_port_register( SpiPort * p_spiPort )
-{
-    this->p_spiPort = p_spiPort;
-}
-
-bool ComSide::spi_is_connected( void )
-{
-    if( p_spiPort == nullptr )
-    {
-        return false;
-    }
-
-    return p_spiPort->is_connected();
-}
-
-bool ComSide::rf_is_connected( void )
-{
-    if( p_rfPipe == nullptr )
-    {
-        return false;
-    }
-
-    return p_rfPipe->is_connected();
+    return true;
 }
 
 /******************************************************************/
 /*                         Communications                         */
 /******************************************************************/
-
-inline void ComSide::com_wired_start( void )
-{
-    /* Assign the SPI port to the wired communication model */
-    com_model_wired.spi_port_set( p_spiPort );
-
-    /* Set the pointer to the communication model  */
-    p_com_model =  com_model_wired.com_model_get();
-
-    /* Set the communication mode and start the connection */
-    mode = SIDE_MODE_WIRED;
-    state_set( SIDE_STATE_CONNECTION_START );
-}
-
-inline void ComSide::com_rf_start( void )
-{
-    /* Register the RF pipe to the RF communication model */
-    com_model_rf.rf_pipe_set( p_rfPipe );
-
-    /* Set the pointer to the communication model  */
-    p_com_model =  com_model_rf.com_model_get();
-
-    /* Set the communication mode and start the connection */
-    mode = SIDE_MODE_RF;
-    state_set( SIDE_STATE_CONNECTION_START );
-}
-
-inline void ComSide::com_ble_start( void )
-{
-    /* Assign the SPI port to the ble communication model */
-    com_model_ble.spi_port_set( p_spiPort );
-
-    /* Set the pointer to the communication model  */
-    p_com_model =  com_model_ble.com_model_get();
-
-    /* Set the communication mode and start the connection */
-    mode = SIDE_MODE_BLE;
-    state_set( SIDE_STATE_CONNECTION_START );
-}
 
 void ComSide::com_model_event_process( ComModel::com_model_event_t event )
 {
@@ -203,7 +50,7 @@ void ComSide::com_model_event_process( ComModel::com_model_event_t event )
     {
         case ComModel::COM_MODEL_EVENT_RECONNECT_NEEDED:
 
-            reconnect_needed = true;
+            reconnect_request = true;
 
             break;
 
@@ -222,46 +69,75 @@ void ComSide::com_model_event_cb( void * p_instance, ComModel::com_model_event_t
     p_comSide->com_model_event_process( event );
 }
 
+inline bool ComSide::com_model_is_connected( void )
+{
+    if( p_com_model == nullptr )
+    {
+        return false;
+    }
+
+    return p_com_model->is_connected();
+}
+
+inline void ComSide::com_model_start( void )
+{
+    ComModel::com_model_event_cb_config_t event_cb_config;
+
+    /* Register the communication model event callback */
+    event_cb_config.p_instance = this;
+    event_cb_config.event_cb = com_model_event_cb;
+
+    p_com_model->event_cb_config( &event_cb_config );
+
+    /* Set the communication mode and start the connection */
+    state_set( SIDE_STATE_CONNECTION_START );
+}
+
+inline bool ComSide::disconnect_needed( void )
+{
+    /*
+     * In this module when any of these conditions are met, the module should move to the disconnected state.
+     * Possible reconnection needs to be triggered via the "connect" API function call outside of this module.
+     */
+
+    if ( disconnect_request == true || reconnect_request == true || com_model_is_connected( ) == false )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+/******************************************************************/
+/*                         State machine                          */
+/******************************************************************/
+
 inline void ComSide::state_set( side_state_t state )
 {
     this->state = state;
 }
 
-inline void ComSide::state_set_disconnected()
+inline void ComSide::state_set_disconnected( void )
 {
+    /* Perform the Com model-specific disconnect */
+    p_com_model->disconnect();
+
+    /* Remove the communication model */
     p_com_model = nullptr;
     state_set( SIDE_STATE_DISCONNECTED );
-}
 
-inline void ComSide::state_set_reconnect()
-{
-    ASSERT_DYGMA( reconnect_needed == true, "Unexpected COM Side reconnect behavior." );
-
-    /*
-     * We just initialize the DISCONNECT process which will prepare the system for the new connection.
-     * The next connection attempt will be started automatically based on the state of the system.
-     */
-
-    state_set( SIDE_STATE_DISCONNECT );
+    /* Clear the disconnect request flag */
+    disconnect_request = false;
+    reconnect_request = false;
 }
 
 inline void ComSide::state_disconnected_process( void )
 {
-    if( spi_is_connected() == true )
-    {
-        if( ble_enabled == true )
-        {
-            com_ble_start();
-        }
-        else if ( wired_enabled == true )
-        {
-            com_wired_start();
-        }
-    }
-    else if( rf_enabled == true && rf_is_connected() == true )
-    {
-        com_rf_start();
-    }
+    /*
+     * Waiting for the API connect function call
+     */
 }
 
 inline void ComSide::state_connection_start_process( void )
@@ -269,8 +145,11 @@ inline void ComSide::state_connection_start_process( void )
     Packet packet_send{};
 
     /* Check whether the connection is still active */
-    if( p_com_model->is_connected() == false )
+    if( disconnect_needed() == true )
     {
+        /*
+         * We go straight to the DISCONNECTED state as the CONNECT has not been reported to the system before
+         */
         state_set_disconnected();
         return;
     }
@@ -295,12 +174,16 @@ inline void ComSide::state_connection_wait_process( void )
     Packet packet_read{};
     Packet packet_send{};
 
-    /* Check the timeout for receiving the CONNECT message */
-    if( reconnect_needed == true )
+    /* Check whether the connection is still active */
+    if( disconnect_needed() == true )
     {
-        state_set_reconnect( );
+        /*
+         * We go straight to the DISCONNECTED state as the CONNECT has not been reported to the system before
+         */
+        state_set_disconnected();
         return;
     }
+    /* Check the timeout for receiving the CONNECT message */
     else if( timer_check( &connection_timer ) == true )
     {
         /* Re-iterate the handshake process */
@@ -343,22 +226,12 @@ inline void ComSide::state_connected_process( void )
     Packet packet_read{};
 
     /* Check whether the connection is still active */
-    if( p_com_model->is_connected() == false )
-    {
-        state_set( SIDE_STATE_DISCONNECT );
-        return;
-    }
-    else if( mode == SIDE_MODE_RF && spi_is_connected() == true )
+    if( disconnect_needed() == true )
     {
         /*
-         * The Wired communication is prioritized. Hence we disconnect the RF mode now.
+         * The CONNECT has been processed to the system before. Hence we do the full DISCONNECT report in the DISCONNECT state.
          */
         state_set( SIDE_STATE_DISCONNECT );
-        return;
-    }
-    else if( reconnect_needed == true )
-    {
-        state_set_reconnect( );
         return;
     }
 
@@ -388,26 +261,8 @@ inline void ComSide::state_disconnect_process( void )
     packet.header.command = Communications_protocol::DISCONNECTED;
     packet.header.device  = p_com_model->dev_side_get();
 
-    /* Perform the Com model-specific disconnect */
-    p_com_model->disconnect();
-
-    /* Remove the SPI port */
-    if( mode == SIDE_MODE_WIRED || mode == SIDE_MODE_BLE )
-    {
-        /* We nullify the spiPort only for the SPI-related modes. An existence of a valid and connected SPI port is a reason
-         * for switching from RF mode to the Wired one. Thus we must keep the SPI port available in such case. */
-        p_spiPort = nullptr;
-    }
-
-    /* Remove the communication model */
-    p_com_model = nullptr;
-
-    /* Remove possible reconnection request flag */
-    reconnect_needed = false;
-
     /* Move to the DISCONNECTED state */
-    mode = SIDE_MODE_UNKNOWN;
-    state_set( SIDE_STATE_DISCONNECTED );
+    state_set_disconnected();
 
     /* Inform the rest of the system about the DISCONNECTION event */
     Communications.callbacks.call(packet.header.command, packet);
@@ -458,6 +313,54 @@ inline void ComSide::machine( void )
 void ComSide::run( void )
 {
     machine();
+}
+
+bool ComSide::connect( ComModel * p_com_model )     /* Will start the connection handshake process */
+{
+    ASSERT_DYGMA( state == SIDE_STATE_DISCONNECTED, "Invalid state for ComSide connection detected" );
+
+    if( state != SIDE_STATE_DISCONNECTED )
+    {
+        return false;
+    }
+
+    if( p_com_model->is_connected() == false )
+    {
+        return false;
+    }
+
+    /* Register the communication model */
+    this->p_com_model = p_com_model;
+
+    /* Prapare the flags */
+    disconnect_request = false;
+    reconnect_request = false;
+
+    /* Start the connection process */
+    com_model_start( );
+
+    return true;
+}
+
+void ComSide::disconnect( void )                    /* Will start the disconnect process */
+{
+    if( state == SIDE_STATE_DISCONNECTED )
+    {
+        /* If we already are in the DISCONNECTED state, we ignore the command */
+        return;
+    }
+
+    disconnect_request = true;
+}
+
+bool ComSide::is_connected( void )
+{
+    return ( state == SIDE_STATE_CONNECTED && com_model_is_connected() == true ) ? true : false;
+}
+
+bool ComSide::is_disconnected( void )
+{
+    return ( state == SIDE_STATE_DISCONNECTED ) ? true : false;
 }
 
 bool ComSide::sendPacket( Packet &packet )
