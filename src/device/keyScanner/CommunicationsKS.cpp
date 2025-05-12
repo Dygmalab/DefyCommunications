@@ -31,7 +31,19 @@
 #include "BatteryManagement.hpp"
 #include "Keyscanner.hpp"
 
-constexpr uint8_t SIDE_ID = 25;
+enum class Host_status
+{
+    CONNECTED,
+    DISCONNECTED,
+    UNKNOWN
+};
+
+Host_status previous_host_status = Host_status::DISCONNECTED;
+
+Host_status host_connected = Host_status::UNKNOWN;
+
+uint32_t ms_since_host_disconnected = 0;
+
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
 class Communications Communications;
@@ -91,19 +103,48 @@ void check_if_keyboard_is_wired_wireless(){
   if (configuration_set && KeyScanner.get_information_asked()){
       KeyScanner.send_configuration_package();
       KeyScanner.information_asked(false);
+
+      Packet host_status_packet{};
+      host_status_packet.header.command = HOST_CONNECTION_STATUS;
+      host_status_packet.header.size = 1;
+      Communications.sendPacket(host_status_packet);
   }
+}
+
+bool Communications::is_host_connected()
+{
+    if (host_connected == Host_status::CONNECTED)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void Communications::run() {
   WiredCommunication::run();
   RFGWCommunication::run();
-  if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished) {
-    //TODO: be careful this is not going to break in the upgrade procedure.
-    const constexpr uint32_t timeout_no_connection = 40000;
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
-    if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection) {
+
+  //TODO: be careful this is not going to break in the upgrade procedure.
+  const constexpr uint32_t timeout_no_connection = 40000;
+
+  if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished)
+  {
+    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+    if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection)
+    {
       goToSleep();
     }
+  }
+  else if (host_connected == Host_status::DISCONNECTED)
+  {
+      uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
+      if (ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
+      {
+          goToSleep();
+      }
   }
 
   check_if_keyboard_is_wired_wireless();
@@ -129,7 +170,7 @@ void Communications::init()
   });
 
   callbacks.bind(VERSION, [this](const Packet &p) {
-    DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
+    //DBG_PRINTF_TRACE("Received VERSION from %i", p.header.device);
     uint32_t version = FMW_VERSION;
     Packet packet{};
     memcpy(packet.data, &version, sizeof(version));
@@ -163,7 +204,7 @@ void Communications::init()
 
     LEDManagement::layer_config_received.brightness = true;
 
-      DBG_PRINTF_TRACE("RECEIVED BRIGHTNESS from %i ", p.header.device);
+      //DBG_PRINTF_TRACE("RECEIVED BRIGHTNESS from %i ", p.header.device);
     /* p.data[0] led driver brightness
      * p.data[1] underglow brightness
      * p.data[2] LED effect id
@@ -180,13 +221,17 @@ void Communications::init()
 
   callbacks.bind(MODE_LED, [this](Packet const &p)
   {
-    DBG_PRINTF_TRACE("Received MODE_LED from %i ", p.header.device);
     LEDManagement::layer_config_received.led_mode = true;
+    DBG_PRINTF_TRACE("Receive MODE_LED from %i ", p.header.device);
+
     //If we have received the configuration, we can set the LED mode.
     //If not, we will reset the flag. And we will wait for the next configuration.
     if (LEDManagement::config_received())
     {
-       LEDManagement::set_led_mode(p.data);
+        if (host_connected != Host_status::UNKNOWN)
+        {
+            LEDManagement::set_led_mode(p.data);
+        }
     }
     else
     {
@@ -207,7 +252,7 @@ void Communications::init()
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
 
-      DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
+    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
 
     uint8_t layerIndex = p.data[0];
    // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
@@ -244,7 +289,7 @@ void Communications::init()
   callbacks.bind(LAYER_UNDERGLOW_COLORS, [this](Packet p) {
 
     uint8_t layerIndex = p.data[0];
-    DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
+    //DBG_PRINTF_TRACE("Received LAYER_UNDERGLOW_COLORS from %i %i", p.header.device, layerIndex);
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
@@ -275,6 +320,39 @@ void Communications::init()
       }
   });
 
+  callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
+  {
+    DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
+
+    if (p.data[0] == 1)
+    {
+        DBG_PRINTF_TRACE("HOST CONNECTED ");
+        host_connected = Host_status::CONNECTED;
+
+        if(previous_host_status != host_connected)
+        {
+            previous_host_status = host_connected;
+            Packet mode_led_packet{};
+            mode_led_packet.header.command = Communications_protocol::MODE_LED;
+            mode_led_packet.header.size = 1;
+            sendPacket(mode_led_packet);
+        }
+
+    }
+    else
+    {
+        DBG_PRINTF_TRACE("HOST DISCONNECTED ");
+        host_connected = Host_status::DISCONNECTED;
+
+        ms_since_host_disconnected = to_ms_since_boot(get_absolute_time());
+
+        if(previous_host_status != host_connected && p.data[1] == 0)
+        {
+            previous_host_status = host_connected;
+            LEDManagement::set_mode_disconnected();
+        }
+    }
+  });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
       KeyScanner.information_asked(true);
