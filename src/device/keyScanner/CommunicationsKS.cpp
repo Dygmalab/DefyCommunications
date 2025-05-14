@@ -341,7 +341,7 @@ void Communications::init()
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_connected = Host_status::DISCONNECTED;
 
-        ms_since_host_disconnected = to_ms_since_boot(get_absolute_time());
+        ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
 
         if(previous_host_status != host_connected && p.data[1] == 0)
         {
