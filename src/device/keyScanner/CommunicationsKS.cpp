@@ -19,17 +19,15 @@
 
 #ifdef KEYSCANNER
 #include "Communications.h"
-#include "hardware/gpio.h"
-#include "pico/stdlib.h"
 #include "debug_print.h"
-#include "SPI.hpp"
-#include "CRC.h"
-#include "pico/util/queue.h"
+
+
 #include "LEDManagement.hpp"
 #include "RFGW_communications.h"
 #include "WiredCommunication.hpp"
 #include "BatteryManagement.hpp"
 #include "Keyscanner.hpp"
+#include "hal_mcu_systim.h"
 
 enum class Host_status
 {
@@ -66,7 +64,7 @@ void check_if_keyboard_is_wired_wireless(){
   if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set){
     //We are on a wired keyboard.
     const constexpr uint32_t timeout = 500;
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
     static uint32_t last_time                       = ms_since_enter;
 
     if (ms_since_enter - last_time >= timeout) {
@@ -82,7 +80,7 @@ void check_if_keyboard_is_wired_wireless(){
   }
   else if (RFGateway::module_is_connected() && !configuration_set)
   {
-    uint32_t ms_since_enter                        = to_ms_since_boot(get_absolute_time());
+    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
     const constexpr uint32_t timeout = 2000;
     static uint32_t last_time                       = ms_since_enter;
 
@@ -129,10 +127,10 @@ void Communications::run() {
 
   //TODO: be careful this is not going to break in the upgrade procedure.
   const constexpr uint32_t timeout_no_connection = 40000;
-
+  uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
+  
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished)
   {
-    uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
     if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection)
     {
       goToSleep();
@@ -140,7 +138,6 @@ void Communications::run() {
   }
   else if (host_connected == Host_status::DISCONNECTED)
   {
-      uint32_t ms_since_enter = to_ms_since_boot(get_absolute_time());
       if (ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
       {
           goToSleep();
@@ -344,7 +341,7 @@ void Communications::init()
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_connected = Host_status::DISCONNECTED;
 
-        ms_since_host_disconnected = to_ms_since_boot(get_absolute_time());
+        ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
 
         if(previous_host_status != host_connected && p.data[1] == 0)
         {
