@@ -244,7 +244,7 @@ bool Communications::is_host_connected()
 void connection_state_machine ()
 {
     //HOST CONNECTION
-    static bool prev_host_connected = true;
+    static bool prev_host_connected = false;
     static uint32_t last_host_connection_check = 0;
 
     switch (conn_state)
