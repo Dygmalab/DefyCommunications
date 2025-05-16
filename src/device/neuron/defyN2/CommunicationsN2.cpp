@@ -332,7 +332,7 @@ void connection_state_machine ()
     volatile uint32_t usbConnectionTime = 0;
 
     //HOST CONNECTION
-    static bool prev_host_connected = true;
+    static bool prev_host_connected = false;
     static uint32_t last_host_connection_check = 0;
 
     // KEYSCANNER INSTANCE
