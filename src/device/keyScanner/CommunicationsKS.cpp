@@ -133,11 +133,28 @@ void Communications::run() {
       goToSleep();
     }
   }
-  else if (host_status.connection == Host_status::DISCONNECTED)
+  else if (host_status.connection == Host_status::DISCONNECTED && ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
   {
-      if (host_status.sleep_enabled && ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
+      if (host_status.sleep_enabled )
       {
           goToSleep();
+      }
+      else
+      {
+          // This case is when the host is disconnected and we are not in sleep mode.
+          if(KeyScanner::new_keypress()) // If we detect some key press we want to turn on the LEDs, this is to have a consistent behavior.
+          {
+              LEDManagement::force_bl_shutdown_state(false);
+              LEDManagement::force_ug_shutdown_state(false);
+              LEDManagement::turnPowerOn(true);
+              ms_since_host_disconnected = ms_since_enter;
+              KeyScanner::set_key_press_event(false); // Reset the key press event
+          }
+          else
+          {
+              LEDManagement::force_bl_shutdown_state(true);
+              LEDManagement::force_ug_shutdown_state(true);
+          }
       }
   }
 
@@ -322,6 +339,9 @@ void Communications::init()
     {
         DBG_PRINTF_TRACE("HOST CONNECTED ");
         host_status.connection = Host_status::CONNECTED;
+
+        LEDManagement::force_bl_shutdown_state(false);
+        LEDManagement::force_ug_shutdown_state(false);
 
         if(host_status.previous_conn != host_status.connection)
         {
