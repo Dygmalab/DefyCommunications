@@ -650,9 +650,13 @@ bool Communications::sendPacketHostConnection( void )
     Communications_protocol::Packet packet{};
 
     packet.header.command = Communications_protocol::HOST_CONNECTION;
-    packet.header.size    = 2;
+    packet.header.size    = 3;
+    // Send host connection status.
     packet.data[0]        = host_connected;
     packet.data[1]        = ble_innited();
+    // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
+    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
+    packet.data[2]        =  (keyScanner.leftSideWiredConnection() && keyScanner.rightSideWiredConnection());
 
     return sendPacket(packet);
 }
