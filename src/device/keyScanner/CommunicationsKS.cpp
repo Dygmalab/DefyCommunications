@@ -36,9 +36,13 @@ enum class Host_status
     UNKNOWN
 };
 
-Host_status previous_host_status = Host_status::DISCONNECTED;
-
-Host_status host_connected = Host_status::UNKNOWN;
+struct host_connection_t
+{
+    Host_status connection = Host_status::UNKNOWN;
+    Host_status previous_conn = Host_status::DISCONNECTED;
+    bool sleep_enabled;
+};
+host_connection_t host_status;
 
 uint32_t ms_since_host_disconnected = 0;
 
@@ -88,13 +92,6 @@ void check_if_keyboard_is_wired_wireless(){
       last_time = ms_since_enter;
       configuration_set = true;
       KeyScanner.specifications.conection = Pins::Device::Wireless;
-      //debug message
-      /*DBG_PRINTF_TRACE("keyboard connection wireless" );
-      DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
-      DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
-      DBG_PRINTF_TRACE("Chip id: ");
-      DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
-      DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
     }
   }
 
@@ -111,7 +108,7 @@ void check_if_keyboard_is_wired_wireless(){
 
 bool Communications::is_host_connected()
 {
-    if (host_connected == Host_status::CONNECTED)
+    if (host_status.connection == Host_status::CONNECTED)
     {
         return true;
     }
@@ -136,9 +133,9 @@ void Communications::run() {
       goToSleep();
     }
   }
-  else if (host_connected == Host_status::DISCONNECTED)
+  else if (host_status.connection == Host_status::DISCONNECTED)
   {
-      if (ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
+      if (host_status.sleep_enabled && ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
       {
           goToSleep();
       }
@@ -225,7 +222,7 @@ void Communications::init()
     //If not, we will reset the flag. And we will wait for the next configuration.
     if (LEDManagement::config_received())
     {
-        if (host_connected != Host_status::UNKNOWN)
+        if (host_status.connection != Host_status::UNKNOWN)
         {
             LEDManagement::set_led_mode(p.data);
         }
@@ -324,11 +321,11 @@ void Communications::init()
     if (p.data[0] == 1)
     {
         DBG_PRINTF_TRACE("HOST CONNECTED ");
-        host_connected = Host_status::CONNECTED;
+        host_status.connection = Host_status::CONNECTED;
 
-        if(previous_host_status != host_connected)
+        if(host_status.previous_conn != host_status.connection)
         {
-            previous_host_status = host_connected;
+            host_status.previous_conn = host_status.connection;
             Packet mode_led_packet{};
             mode_led_packet.header.command = Communications_protocol::MODE_LED;
             mode_led_packet.header.size = 1;
@@ -339,16 +336,18 @@ void Communications::init()
     else
     {
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
-        host_connected = Host_status::DISCONNECTED;
+        host_status.connection = Host_status::DISCONNECTED;
 
         ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
 
-        if(previous_host_status != host_connected && p.data[1] == 0)
+        if(host_status.previous_conn != host_status.connection && p.data[1] == 0)
         {
-            previous_host_status = host_connected;
+            host_status.previous_conn = host_status.connection;
             LEDManagement::set_mode_disconnected();
         }
     }
+    DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
+    host_status.sleep_enabled = p.data[2] != 1;
   });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
