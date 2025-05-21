@@ -368,9 +368,10 @@ bool Communications::sendPacketHostConnection( void )
     Communications_protocol::Packet packet{};
 
     packet.header.command = Communications_protocol::HOST_CONNECTION;
-    packet.header.size    = 2;
+    packet.header.size    = 3;
     packet.data[0]        = host_connected;
-    packet.data[1]        = false;
+    packet.data[1]        = false; // BT disabled in WN.
+    packet.data[2]       = true; // We will always have both sides wired.
 
     return sendPacket(packet);
 }
