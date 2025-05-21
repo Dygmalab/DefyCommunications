@@ -147,17 +147,17 @@ void Communications::run() {
               LEDManagement::force_bl_shutdown_state(false);
               LEDManagement::force_ug_shutdown_state(false);
               LEDManagement::turnPowerOn(true);
-              ms_since_host_disconnected = ms_since_enter;
-              KeyScanner::set_key_press_event(false); // Reset the key press event
+              ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
           }
           else
           {
+              LEDManagement::turnPowerOff();
               LEDManagement::force_bl_shutdown_state(true);
               LEDManagement::force_ug_shutdown_state(true);
           }
       }
   }
-
+  KeyScanner::set_key_press_event(false); // Reset the key press event
   check_if_keyboard_is_wired_wireless();
 }
 
@@ -340,9 +340,6 @@ void Communications::init()
         DBG_PRINTF_TRACE("HOST CONNECTED ");
         host_status.connection = Host_status::CONNECTED;
 
-        LEDManagement::force_bl_shutdown_state(false);
-        LEDManagement::force_ug_shutdown_state(false);
-
         if(host_status.previous_conn != host_status.connection)
         {
             host_status.previous_conn = host_status.connection;
@@ -350,6 +347,10 @@ void Communications::init()
             mode_led_packet.header.command = Communications_protocol::MODE_LED;
             mode_led_packet.header.size = 1;
             sendPacket(mode_led_packet);
+
+            LEDManagement::force_bl_shutdown_state(false);
+            LEDManagement::force_ug_shutdown_state(false);
+            LEDManagement::turnPowerOn(true);
         }
 
     }
@@ -359,6 +360,8 @@ void Communications::init()
         host_status.connection = Host_status::DISCONNECTED;
 
         ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
+
+        KeyScanner::set_key_press_event(false); // Reset the key press event.
 
         if(host_status.previous_conn != host_status.connection && p.data[1] == 0)
         {
