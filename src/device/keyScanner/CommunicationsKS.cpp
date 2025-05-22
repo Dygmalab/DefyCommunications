@@ -59,7 +59,6 @@ void goToSleep() {
 
 void check_if_keyboard_is_wired_wireless()
 {
-  static uint8_t counter = 0;
   static bool configuration_set = false;
 
   if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set)
