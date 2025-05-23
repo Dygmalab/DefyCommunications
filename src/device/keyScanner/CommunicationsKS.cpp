@@ -40,7 +40,7 @@ Host_status previous_host_status = Host_status::DISCONNECTED;
 
 Host_status host_connected = Host_status::UNKNOWN;
 
-uint32_t ms_since_host_disconnected = 0;
+systim_timer_t *host_disconnected_timer;
 
 Communications_protocol::Devices device;
 using led_type_t = LEDManagement::LedBrightnessControlEffect;
@@ -57,37 +57,14 @@ void goToSleep() {
   BatteryManagement::goToSleep();
 }
 
-void check_if_keyboard_is_wired_wireless(){
-  static uint8_t counter = 0;
+void check_if_keyboard_is_wired_wireless()
+{
   static bool configuration_set = false;
 
-  if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set){
-    //We are on a wired keyboard.
-    const constexpr uint32_t timeout = 500;
-    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
-    static uint32_t last_time                       = ms_since_enter;
-
-    if (ms_since_enter - last_time >= timeout) {
-      last_time = ms_since_enter;
-      counter++;
-
-      if (counter > 3) {
-        KeyScanner.specifications.conection = Pins::Device::Wired;
-        counter = 0;
-        configuration_set = true;
-      }
-    }
-  }
-  else if (RFGateway::module_is_connected() && !configuration_set)
+  if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set)
   {
-    uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
-    const constexpr uint32_t timeout = 2000;
-    static uint32_t last_time                       = ms_since_enter;
-
-    if (ms_since_enter - last_time >= timeout) {
-      last_time = ms_since_enter;
       configuration_set = true;
-      KeyScanner.specifications.conection = Pins::Device::Wireless;
+      KeyScanner.specifications.conection = KsConfig::Device::Wired;
       //debug message
       /*DBG_PRINTF_TRACE("keyboard connection wireless" );
       DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
@@ -95,10 +72,22 @@ void check_if_keyboard_is_wired_wireless(){
       DBG_PRINTF_TRACE("Chip id: ");
       DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
       DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
-    }
+  }
+  else if (RFGateway::module_is_connected() && !configuration_set)
+  {
+      configuration_set = true;
+      KeyScanner.specifications.conection = KsConfig::Device::Wireless;
+      //debug message
+      /*DBG_PRINTF_TRACE("keyboard connection wireless" );
+      DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
+      DBG_PRINTF_TRACE("keyboard name %i", KeyScanner.specifications.device_name );
+      DBG_PRINTF_TRACE("Chip id: ");
+      DBG_PRINTF_TRACE("%s", KeyScanner.specifications.chip_id);
+      DBG_PRINTF_TRACE("rf_gatewar_chip_id: %lu",  KeyScanner.specifications.rf_gateway_chip_id);*/
   }
 
-  if (configuration_set && KeyScanner.get_information_asked()){
+  if (configuration_set && KeyScanner.get_information_asked())
+  {
       KeyScanner.send_configuration_package();
       KeyScanner.information_asked(false);
 
@@ -121,24 +110,21 @@ bool Communications::is_host_connected()
     }
 }
 
-void Communications::run() {
+void Communications::run()
+{
   WiredCommunication::run();
   RFGWCommunication::run();
 
-  //TODO: be careful this is not going to break in the upgrade procedure.
-  const constexpr uint32_t timeout_no_connection = 40000;
-  uint32_t ms_since_enter                        = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
-  
   if (!WiredCommunication::connectionEstablished && !RFGWCommunication::connectionEstablished)
   {
-    if (ms_since_enter - KeyScanner.get_ms_since_last_key_sent() >= timeout_no_connection)
+    if (KeyScanner.key_timer_expired())
     {
       goToSleep();
     }
   }
   else if (host_connected == Host_status::DISCONNECTED)
   {
-      if (ms_since_enter - ms_since_host_disconnected >= timeout_no_connection)
+      if (systim_timer_check(host_disconnected_timer))
       {
           goToSleep();
       }
@@ -149,6 +135,8 @@ void Communications::run() {
 
 void Communications::init()
 {
+  systim_timer_init(&host_disconnected_timer);
+  systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
   if (KsConfig::get_side() == KsConfig::Side::RIGHT) {
     device = Communications_protocol::KEYSCANNER_DEFY_RIGHT;
   } else {
@@ -334,14 +322,13 @@ void Communications::init()
             mode_led_packet.header.size = 1;
             sendPacket(mode_led_packet);
         }
-
     }
     else
     {
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_connected = Host_status::DISCONNECTED;
 
-        ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
+        systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
 
         if(previous_host_status != host_connected && p.data[1] == 0)
         {
@@ -353,7 +340,6 @@ void Communications::init()
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
       KeyScanner.information_asked(true);
-    DBG_PRINTF_TRACE("Received CONFIGURATION from %i ", p.header.device);
   });
 
 
