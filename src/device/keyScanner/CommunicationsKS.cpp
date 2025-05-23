@@ -64,7 +64,7 @@ void check_if_keyboard_is_wired_wireless()
   if (WiredCommunication::connectionEstablished && !RFGateway::module_is_connected() && !configuration_set)
   {
       configuration_set = true;
-      KeyScanner.specifications.conection = Pins::Device::Wired;
+      KeyScanner.specifications.conection = KsConfig::Device::Wired;
       //debug message
       /*DBG_PRINTF_TRACE("keyboard connection wireless" );
       DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
@@ -76,7 +76,7 @@ void check_if_keyboard_is_wired_wireless()
   else if (RFGateway::module_is_connected() && !configuration_set)
   {
       configuration_set = true;
-      KeyScanner.specifications.conection = Pins::Device::Wireless;
+      KeyScanner.specifications.conection = KsConfig::Device::Wireless;
       //debug message
       /*DBG_PRINTF_TRACE("keyboard connection wireless" );
       DBG_PRINTF_TRACE("keyboard configuration %i", KeyScanner.specifications.configuration );
@@ -136,7 +136,7 @@ void Communications::run()
 void Communications::init()
 {
   systim_timer_init(&host_disconnected_timer);
-  systim_timer_set_ms(host_disconnected_timer, Pins::TIMEOUT_NO_CONNECTION);
+  systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
   if (KsConfig::get_side() == KsConfig::Side::RIGHT) {
     device = Communications_protocol::KEYSCANNER_DEFY_RIGHT;
   } else {
@@ -328,7 +328,7 @@ void Communications::init()
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_connected = Host_status::DISCONNECTED;
 
-        systim_timer_set_ms(host_disconnected_timer, Pins::TIMEOUT_NO_CONNECTION);
+        systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
 
         if(previous_host_status != host_connected && p.data[1] == 0)
         {
