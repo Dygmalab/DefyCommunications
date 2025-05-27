@@ -310,6 +310,20 @@ void connection_state_machine ()
             //Send the connected message to the KS
             Communications.sendPacketHostConnection( );
 
+            //Check if we need to turn off the WN LED.
+            if(!host_connected)
+            {
+                ::LEDControl.disable();
+            }
+            else
+            {
+                //If the host is connected, we enable the LED control.
+                if( !::LEDControl.isEnabled() )
+                {
+                    ::LEDControl.enable();
+                }
+            }
+
             prev_host_connected = host_connected;
             host_connection_requested = false;
 
@@ -368,10 +382,11 @@ bool Communications::sendPacketHostConnection( void )
     Communications_protocol::Packet packet{};
 
     packet.header.command = Communications_protocol::HOST_CONNECTION;
-    packet.header.size    = 3;
+    packet.header.size    = 4;
     packet.data[0]        = host_connected;
     packet.data[1]        = false; // BT disabled in WN.
     packet.data[2]       = true; // We will always have both sides wired.
+    packet.data[3]       = true; // Shutdown LEDs. This is only for the WN. We dont want to show the disconnected LED effect
 
     return sendPacket(packet);
 }
