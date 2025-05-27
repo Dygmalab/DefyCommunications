@@ -41,6 +41,8 @@ struct host_connection_t
     Host_status connection = Host_status::UNKNOWN;
     Host_status previous_conn = Host_status::DISCONNECTED;
     bool sleep_enabled;
+    bool shut_down_leds = false; // This is used to know if we should turn off the LEDs when the host is disconnected.
+                                                    // And avoid the disconnection LED effect.
 };
 host_connection_t host_status;
 
@@ -334,6 +336,8 @@ void Communications::init()
   callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
   {
     DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
+    //Check if we need to show the disconnection LED effect, or we should turn off the LEDs directly.
+    host_status.shut_down_leds = p.data[3] == 1;
 
     if (p.data[0] == 1)
     {
@@ -366,7 +370,15 @@ void Communications::init()
         if(host_status.previous_conn != host_status.connection && p.data[1] == 0)
         {
             host_status.previous_conn = host_status.connection;
-            LEDManagement::set_mode_disconnected();
+            if ( host_status.shut_down_leds )
+            {
+                LEDManagement::force_bl_shutdown_state(true);
+                LEDManagement::force_ug_shutdown_state(true);
+            }
+            else
+            {
+                LEDManagement::set_mode_disconnected();
+            }
         }
     }
     DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
