@@ -142,7 +142,7 @@ void Communications::run()
               LEDManagement::force_bl_shutdown_state(false);
               LEDManagement::force_ug_shutdown_state(false);
               LEDManagement::turnPowerOn(true);
-              ms_since_host_disconnected = hal_mcu_systim_ms_get(hal_mcu_systim_counter_get());
+              systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION); // Reset the timer to avoid the disconnection LED effect.
           }
           else
           {
