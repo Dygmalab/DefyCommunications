@@ -36,9 +36,15 @@ enum class Host_status
     UNKNOWN
 };
 
-Host_status previous_host_status = Host_status::DISCONNECTED;
-
-Host_status host_connected = Host_status::UNKNOWN;
+struct host_connection_t
+{
+    Host_status connection = Host_status::UNKNOWN;
+    Host_status previous_conn = Host_status::DISCONNECTED;
+    bool sleep_enabled;
+    bool shut_down_leds = false; // This is used to know if we should turn off the LEDs when the host is disconnected.
+                                                    // And avoid the disconnection LED effect.
+};
+host_connection_t host_status;
 
 systim_timer_t *host_disconnected_timer;
 
@@ -100,7 +106,7 @@ void check_if_keyboard_is_wired_wireless()
 
 bool Communications::is_host_connected()
 {
-    if (host_connected == Host_status::CONNECTED)
+    if (host_status.connection == Host_status::CONNECTED)
     {
         return true;
     }
@@ -122,14 +128,31 @@ void Communications::run()
       goToSleep();
     }
   }
-  else if (host_connected == Host_status::DISCONNECTED)
+  else if (host_status.connection == Host_status::DISCONNECTED && systim_timer_check(host_disconnected_timer))
   {
-      if (systim_timer_check(host_disconnected_timer))
+      if (host_status.sleep_enabled )
       {
           goToSleep();
       }
+      else
+      {
+          // This case is when the host is disconnected and we are not in sleep mode.
+          if(KeyScanner::new_keypress()) // If we detect some key press we want to turn on the LEDs, this is to have a consistent behavior.
+          {
+              LEDManagement::force_bl_shutdown_state(false);
+              LEDManagement::force_ug_shutdown_state(false);
+              LEDManagement::turnPowerOn(true);
+              systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION); // Reset the timer to avoid the disconnection LED effect.
+          }
+          else
+          {
+              LEDManagement::turnPowerOff();
+              LEDManagement::force_bl_shutdown_state(true);
+              LEDManagement::force_ug_shutdown_state(true);
+          }
+      }
   }
-
+  KeyScanner::set_key_press_event(false); // Reset the key press event
   check_if_keyboard_is_wired_wireless();
 }
 
@@ -213,7 +236,7 @@ void Communications::init()
     //If not, we will reset the flag. And we will wait for the next configuration.
     if (LEDManagement::config_received())
     {
-        if (host_connected != Host_status::UNKNOWN)
+        if (host_status.connection != Host_status::UNKNOWN)
         {
             LEDManagement::set_led_mode(p.data);
         }
@@ -308,34 +331,52 @@ void Communications::init()
   callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
   {
     DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
+    //Check if we need to show the disconnection LED effect, or we should turn off the LEDs directly.
+    host_status.shut_down_leds = p.data[3] == 1;
 
     if (p.data[0] == 1)
     {
         DBG_PRINTF_TRACE("HOST CONNECTED ");
-        host_connected = Host_status::CONNECTED;
+        host_status.connection = Host_status::CONNECTED;
 
-        if(previous_host_status != host_connected)
+        if(host_status.previous_conn != host_status.connection)
         {
-            previous_host_status = host_connected;
+            host_status.previous_conn = host_status.connection;
             Packet mode_led_packet{};
             mode_led_packet.header.command = Communications_protocol::MODE_LED;
             mode_led_packet.header.size = 1;
             sendPacket(mode_led_packet);
+
+            LEDManagement::force_bl_shutdown_state(false);
+            LEDManagement::force_ug_shutdown_state(false);
+            LEDManagement::turnPowerOn(true);
         }
     }
     else
     {
         DBG_PRINTF_TRACE("HOST DISCONNECTED ");
-        host_connected = Host_status::DISCONNECTED;
+        host_status.connection = Host_status::DISCONNECTED;
 
         systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
 
-        if(previous_host_status != host_connected && p.data[1] == 0)
+        KeyScanner::set_key_press_event(false); // Reset the key press event.
+
+        if(host_status.previous_conn != host_status.connection && p.data[1] == 0)
         {
-            previous_host_status = host_connected;
-            LEDManagement::set_mode_disconnected();
+            host_status.previous_conn = host_status.connection;
+            if ( host_status.shut_down_leds )
+            {
+                LEDManagement::force_bl_shutdown_state(true);
+                LEDManagement::force_ug_shutdown_state(true);
+            }
+            else
+            {
+                LEDManagement::set_mode_disconnected();
+            }
         }
     }
+    DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
+    host_status.sleep_enabled = p.data[2] != 1;
   });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {
