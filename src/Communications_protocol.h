@@ -21,7 +21,7 @@
 #define KEYSCANNER_COMMUNICATIONS_PROTOCOL_H_
 
 
-#include "stdio.h"
+#include <cstdio>
 
 
 namespace Communications_protocol {
