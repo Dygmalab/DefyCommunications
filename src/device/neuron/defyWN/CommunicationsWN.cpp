@@ -22,8 +22,8 @@
 #include "Communications.h"
 #include "CommunicationsWN_side.h"
 #include "SpiPort.h"
-#include "kaleidoscope/plugin/LEDControl.h"
-#include <kaleidoscope.h>
+#include "Kaleidoscope-LEDControl.h"
+#include "Kaleidoscope.h"
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS 0
