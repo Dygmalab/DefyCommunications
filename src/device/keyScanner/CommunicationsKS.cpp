@@ -212,17 +212,33 @@ void Communications::init()
 
     LEDManagement::layer_config_received.brightness = true;
 
-      //DBG_PRINTF_TRACE("RECEIVED BRIGHTNESS from %i ", p.header.device);
+      DBG_PRINTF_TRACE("RECEIVED BRIGHTNESS from %i \n", p.header.device);
+
     /* p.data[0] led driver brightness
      * p.data[1] underglow brightness
      * p.data[2] LED effect id
      * p.data[3] take brightness handler?
      */
-    if (p.data[3] == false) {
-//        DBG_PRINTF_TRACE("Calling onDismount");
+
+      if (  p.data[0] == 0 && p.data[1] == 0)
+      {
+          DBG_PRINTF_TRACE("Setting brightness_handler to false for SHUT_DOWN_LEDS effect.\n");
+          LEDManagement::onMount(LEDManagement::LedBrightnessControlEffect::SHUT_DOWN_LEDS, p.data[0], p.data[1]);
+      }
+      else if ( p.data[0] != 0 || p.data[1] != 0 )
+      {
+          DBG_PRINTF_TRACE("Dismounting SHUT_DOWN_LEDS effect.\n");
+          LEDManagement::onDismount(LEDManagement::LedBrightnessControlEffect::SHUT_DOWN_LEDS);
+      }
+
+    if (p.data[3] == false)
+    {
+      DBG_PRINTF_TRACE("Calling onDismount, LED effect id: %d", p.data[2]);
         LEDManagement::onDismount(static_cast<led_type_t>(p.data[2]));
-    } else {
-//        DBG_PRINTF_TRACE("Calling onMount");
+    }
+    else
+    {
+      DBG_PRINTF_TRACE("Calling onMount %d", p.data[2]);
         LEDManagement::onMount(static_cast<led_type_t>(p.data[2]), p.data[0], p.data[1]);
     }
   });
@@ -253,14 +269,14 @@ void Communications::init()
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p)
   {
-    DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
     LEDManagement::layer_config_received.palette = true;
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
 
-    DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
 
     uint8_t layerIndex = p.data[0];
    // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
@@ -330,13 +346,13 @@ void Communications::init()
 
   callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
   {
-    DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
+    //DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
     //Check if we need to show the disconnection LED effect, or we should turn off the LEDs directly.
     host_status.shut_down_leds = p.data[3] == 1;
 
     if (p.data[0] == 1)
     {
-        DBG_PRINTF_TRACE("HOST CONNECTED ");
+        //DBG_PRINTF_TRACE("HOST CONNECTED ");
         host_status.connection = Host_status::CONNECTED;
 
         if(host_status.previous_conn != host_status.connection)
@@ -354,7 +370,7 @@ void Communications::init()
     }
     else
     {
-        DBG_PRINTF_TRACE("HOST DISCONNECTED ");
+        //DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_status.connection = Host_status::DISCONNECTED;
 
         systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
@@ -375,7 +391,7 @@ void Communications::init()
             }
         }
     }
-    DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
+    //DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
     host_status.sleep_enabled = p.data[2] != 1;
   });
 
