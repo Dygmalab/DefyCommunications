@@ -83,7 +83,7 @@ enum class Connection_status
     IDLE,
     SET_USB_TIMER,
     CHECK_FORCE_BLE,
-    INIT_BT,
+    ENABLE_BT,
     CHECK_USB_CONN,
     CHECK_WIRED_OR_WIRELESS,
     CHECK_USB_TIMER,
@@ -365,7 +365,7 @@ void connection_state_machine ()
             if(force_ble_enabled)
             {
                 //NRF_LOG_INFO("FORCE BLE ENABLED");
-                conn_state = Connection_status::INIT_BT;
+                conn_state = Connection_status::ENABLE_BT;
             }
             else
             {
@@ -374,11 +374,11 @@ void connection_state_machine ()
         }
         break;
 
-        case Connection_status::INIT_BT:
+        case Connection_status::ENABLE_BT:
         {
             //NRF_LOG_INFO("INIT BT");
             //Force connnect again just in case it was set as a device and not a host
-            _BleManager.init();
+            _BleManager.enable();
 
             _BleManager.setForceBle(false);
 
@@ -546,7 +546,7 @@ void connection_state_machine ()
 
                 //NRF_LOG_DEBUG("BLE mode allowed, one  sides disconnected from Neuron.");
 
-                conn_state = Connection_status::INIT_BT;
+                conn_state = Connection_status::ENABLE_BT;
             }
         }
         break;
