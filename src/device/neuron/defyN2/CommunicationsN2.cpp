@@ -339,8 +339,8 @@ void connection_state_machine ()
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
 
     //CABLES CONNECTIONS
-    uint8_t bat_status_l = kaleidoscope::plugin::Battery::get_battery_status_left();
-    uint8_t bat_status_r = kaleidoscope::plugin::Battery::get_battery_status_right();
+    uint8_t bat_status_l = kaleidoscope::Battery::get_battery_status_left();
+    uint8_t bat_status_r = kaleidoscope::Battery::get_battery_status_right();
     auto isDefyLeftWired = keyScanner.leftSideWiredConnection();
     auto isDefyRightWired = keyScanner.rightSideWiredConnection();
 
