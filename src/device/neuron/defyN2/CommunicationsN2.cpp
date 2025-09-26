@@ -146,8 +146,8 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (!kaleidoscope::plugin::RadioManager::isInited()) return;
-    kaleidoscope::plugin::RadioManager::poll();
+    if (!_RadioManager.isInited()) return;
+    _RadioManager.poll();
     comRfPipeLeft.run();
     comRfPipeRight.run();
   }
@@ -346,7 +346,7 @@ void connection_state_machine ()
 
     //WIRELESS MODE STATUS
     bool bleInitiated = ble_innited();
-    bool radioInited = kaleidoscope::plugin::RadioManager::isInited();
+    bool radioInited = _RadioManager.isInited();
 
     switch (conn_state)
     {
@@ -466,7 +466,7 @@ void connection_state_machine ()
                 // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
                 if(!radioInited && !ble_innited())
                 {
-                    kaleidoscope::plugin::RadioManager::enable();
+                    _RadioManager.enable();
 
                     comN2SideLeft.rf_enable( &comRfPipeLeft );
                     comN2SideRight.rf_enable( &comRfPipeRight );
