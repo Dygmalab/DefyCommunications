@@ -466,7 +466,7 @@ void connection_state_machine ()
                 // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
                 if(!radioInited && !ble_innited())
                 {
-                    kaleidoscope::plugin::RadioManager::init();
+                    kaleidoscope::plugin::RadioManager::enable();
 
                     comN2SideLeft.rf_enable( &comRfPipeLeft );
                     comN2SideRight.rf_enable( &comRfPipeRight );
