@@ -491,7 +491,7 @@ void connection_state_machine ()
         {
             //NRF_LOG_INFO("CHECK WIRED OR WIRELESS");
 
-            if(FirmwareVersion.keyboard_is_wireless())
+            if(firmwareVersion.keyboard_is_wireless())
             {
                 //NRF_LOG_INFO("CHECK USB TIMER");
                 conn_state = Connection_status::CHECK_USB_TIMER;
