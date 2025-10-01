@@ -325,7 +325,7 @@ bool Communications::is_host_connected()
 void connection_state_machine ()
 {
     //BLE STATUS
-    static bool force_ble_enabled = _BleManager.getForceBle();
+    static bool force_ble_enabled = BleManager.getForceBle();
     static bool ble_denied = false;
 
     //USB CONNECTION
@@ -378,9 +378,9 @@ void connection_state_machine ()
         {
             //NRF_LOG_INFO("INIT BT");
             //Force connnect again just in case it was set as a device and not a host
-            _BleManager.enable();
+            BleManager.enable();
 
-            _BleManager.setForceBle(false);
+            BleManager.setForceBle(false);
 
 
             comN2SideLeft.ble_enable();
@@ -421,7 +421,7 @@ void connection_state_machine ()
 
                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
                 }
-                if(_BleManager.get_pairing_key_press())
+                if(BleManager.get_pairing_key_press())
                 {
                     conn_state = Connection_status::IDLE;
                     break;
@@ -491,7 +491,7 @@ void connection_state_machine ()
         {
             //NRF_LOG_INFO("CHECK WIRED OR WIRELESS");
 
-            if(firmwareVersion.keyboard_is_wireless())
+            if(FirmwareVersion.keyboard_is_wireless())
             {
                 //NRF_LOG_INFO("CHECK USB TIMER");
                 conn_state = Connection_status::CHECK_USB_TIMER;
@@ -553,7 +553,7 @@ void connection_state_machine ()
 
         case Connection_status::PAIRING_MODE_KEY_CHECK:
         {
-            if(_BleManager.get_pairing_key_press())
+            if(BleManager.get_pairing_key_press())
             {
                 //NRF_LOG_INFO("Pairing key pressed");
                 conn_state = Connection_status::RESET_NEURON;
