@@ -146,8 +146,8 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (!_RadioManager.isInited()) return;
-    _RadioManager.poll();
+    if (!RadioManager.isInited()) return;
+    RadioManager.poll();
     comRfPipeLeft.run();
     comRfPipeRight.run();
   }
@@ -346,7 +346,7 @@ void connection_state_machine ()
 
     //WIRELESS MODE STATUS
     bool bleInitiated = ble_innited();
-    bool radioInited = _RadioManager.isInited();
+    bool radioInited = RadioManager.isInited();
 
     switch (conn_state)
     {
@@ -466,7 +466,7 @@ void connection_state_machine ()
                 // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
                 if(!radioInited && !ble_innited())
                 {
-                    _RadioManager.enable();
+                    RadioManager.enable();
 
                     comN2SideLeft.rf_enable( &comRfPipeLeft );
                     comN2SideRight.rf_enable( &comRfPipeRight );
