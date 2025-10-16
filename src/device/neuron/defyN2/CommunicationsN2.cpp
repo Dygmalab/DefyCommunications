@@ -32,6 +32,7 @@
 #include "Battery.h"
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
+#include "LEDManager.h"
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS     0
@@ -419,7 +420,7 @@ void connection_state_machine ()
                         conn_state = Connection_status::RESET_NEURON;
                     }
 
-                   ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                    LEDManager.led_effect_refresh();
                 }
                 if(BleManager.get_pairing_key_press())
                 {
@@ -440,7 +441,7 @@ void connection_state_machine ()
             {
                 //NRF_LOG_INFO("MODE LED ASKED");
                 mode_led_requested = false;
-                ::LEDControl.set_mode(::LEDControl.get_mode_index()); //Send the mode to the KS.
+                LEDManager.led_effect_refresh(); //Send the mode to the KS.
             }
             else if(mode_led_requested == true && host_connected == false)
             {
@@ -473,7 +474,7 @@ void connection_state_machine ()
                 }
                 if (!ble_innited())
                 {
-                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                    LEDManager.led_effect_refresh();
                 }
                 conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
             }
@@ -581,7 +582,7 @@ void connection_state_machine ()
             if(prev_host_connected != host_connected || host_connection_requested)
             {
                 //The only way to exit this state is by a reset. That will happend when the user press the pairing key and then the ESC key.
-                ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                LEDManager.led_effect_refresh();
 
                   //Send the connected message to the KS.
                 NRF_LOG_INFO("Sending host connection Status");
