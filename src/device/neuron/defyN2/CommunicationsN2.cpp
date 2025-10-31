@@ -27,7 +27,8 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
-#include "Kaleidoscope-IdleLEDsDefy.h"
+//#include "Kaleidoscope-IdleLEDsDefy.h"
+#include "IdleLEDsDygma.h"
 #include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
@@ -112,7 +113,7 @@ void checkActive();
 
 void new_connection_handle(void)
 {
-    IdleLEDsDefy.new_connection_set();
+    IdleLEDsDygma.new_connection_set();
 }
 
 class RFGWCommunications {
@@ -342,8 +343,8 @@ void connection_state_machine ()
     //CABLES CONNECTIONS
     uint8_t bat_status_l = Battery::get_battery_status_left();
     uint8_t bat_status_r = Battery::get_battery_status_right();
-    auto isDefyLeftWired = keyScanner.leftSideWiredConnection();
-    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    auto isDygmaLeftWired = keyScanner.leftSideWiredConnection();
+    auto isDygmaRightWired = keyScanner.rightSideWiredConnection();
 
     //WIRELESS MODE STATUS
     bool bleInitiated = ble_innited();
@@ -414,7 +415,7 @@ void connection_state_machine ()
                 {
                     // We need to check if the sides are connected to the Neuron. if the Ble is initialized and we disconnect both sides, neuron will get stuck
                     // until we reconnect one side and quit the ble advertising mode.
-                    if(!isDefyLeftWired && !isDefyRightWired)
+                    if(!isDygmaLeftWired && !isDygmaRightWired)
                     {
                         // reset neuron to get out of the ble advertising mode. And start the radio manager.
                         conn_state = Connection_status::RESET_NEURON;
@@ -528,9 +529,9 @@ void connection_state_machine ()
             1 o 2 -> Side connected and powered from the N2 while it is connected to the PC via USB.
             4 -> Side disconnected.
             */
-            bool isWiredMode = isDefyLeftWired && isDefyRightWired;
+            bool isWiredMode = isDygmaLeftWired && isDygmaRightWired;
 
-            bool isRFMode = !isDefyLeftWired && !isDefyRightWired;
+            bool isRFMode = !isDygmaLeftWired && !isDygmaRightWired;
 
             if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
             {
