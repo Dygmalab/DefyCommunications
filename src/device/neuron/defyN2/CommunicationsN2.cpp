@@ -27,8 +27,6 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
-//#include "Kaleidoscope-IdleLEDsDefy.h"
-#include "IdleLEDsDygma.h"
 #include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
@@ -113,7 +111,7 @@ void checkActive();
 
 void new_connection_handle(void)
 {
-    IdleLEDsDygma.new_connection_set();
+    LEDManager.com_new_connection_set();
 }
 
 class RFGWCommunications {
