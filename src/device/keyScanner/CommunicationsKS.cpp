@@ -46,6 +46,9 @@ struct host_connection_t
 };
 host_connection_t host_status;
 
+// Track if we're currently receiving multi-packet LED layers
+static bool receiving_multipacket_layers = false;
+
 systim_timer_t *host_disconnected_timer;
 
 Communications_protocol::Devices device;
@@ -60,7 +63,7 @@ void goToSleep() {
   for (int i = 0; i < 100; ++i) {
     RFGateway::run();
   }
-  BatteryManagement::goToSleep();
+  //BatteryManagement::goToSleep();
 }
 
 void check_if_keyboard_is_wired_wireless()
@@ -257,8 +260,9 @@ void Communications::init()
             LEDManagement::set_led_mode(p.data);
         }
     }
-    else
+    else if (!receiving_multipacket_layers)
     {
+        // Only request layers if we're not already receiving them
         LEDManagement::layer_config_received.led_mode = false;
         request_keyscanner_layers();
     }
@@ -276,13 +280,26 @@ void Communications::init()
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
 
-    //DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i ", p.header.device);
+    static uint8_t accumulated_leds = 0;
+    static uint8_t current_layer = 0xFF;
 
     uint8_t layerIndex = p.data[0];
-   // DBG_PRINTF_TRACE("Received LAYER_KEYMAP_COLORS from %i %i ", p.header.device, layerIndex);
+    
+    // Mark that we're receiving multi-packet layers
+    if (p.header.has_more_packets) {
+      receiving_multipacket_layers = true;
+    }
+    
+    // If this is a new layer, reset accumulation
+    if (layerIndex != current_layer) {
+      accumulated_leds = 0;
+      current_layer = layerIndex;
+    }
+    
     if (layerIndex < LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
+    
     union PaletteJoiner {
       struct {
         uint8_t firstColor : 4;
@@ -290,23 +307,36 @@ void Communications::init()
       };
       uint8_t paletteColor;
     };
+    
     LEDManagement::Layer &layer = LEDManagement::layers.at(layerIndex);
     PaletteJoiner message[p.header.size - 1];
     memcpy(message, &p.data[1], p.header.size - 1);
+    
     uint8_t k{};
     bool swap = true;
-    for (uint8_t j = 0; j < sizeof(layer.keyMap_leds); ++j) {
+    uint8_t leds_in_packet = (p.header.size - 1) * 2;
+    
+    // Write LEDs starting from accumulated_leds position
+    for (uint8_t j = 0; j < leds_in_packet && (accumulated_leds + j) < sizeof(layer.keyMap_leds); ++j) {
       if (swap) {
-        layer.keyMap_leds[j] = message[k].firstColor;
+        layer.keyMap_leds[accumulated_leds + j] = message[k].firstColor;
       } else {
-        layer.keyMap_leds[j] = message[k++].secondColor;
+        layer.keyMap_leds[accumulated_leds + j] = message[k++].secondColor;
       }
       swap = !swap;
     }
-
-    if (layerIndex == 9)
-    {
+    
+    accumulated_leds += leds_in_packet;
+    
+    // Only mark as complete if this is the last packet
+    if (!p.header.has_more_packets) {
+      if (layerIndex == 9) {
         LEDManagement::layer_config_received.bl_layer = true;
+        // Clear the flag when we finish receiving the last layer
+        receiving_multipacket_layers = false;
+      }
+      accumulated_leds = 0;
+      current_layer = 0xFF;
     }
   });
 
@@ -346,13 +376,13 @@ void Communications::init()
 
   callbacks.bind(HOST_CONNECTION, [this](Packet const &p)
   {
-    //DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
+    DBG_PRINTF_TRACE("Received HOST_CONNECTION from %i ", p.header.device);
     //Check if we need to show the disconnection LED effect, or we should turn off the LEDs directly.
     host_status.shut_down_leds = p.data[3] == 1;
 
     if (p.data[0] == 1)
     {
-        //DBG_PRINTF_TRACE("HOST CONNECTED ");
+        DBG_PRINTF_TRACE("HOST CONNECTED ");
         host_status.connection = Host_status::CONNECTED;
 
         if(host_status.previous_conn != host_status.connection)
@@ -370,7 +400,7 @@ void Communications::init()
     }
     else
     {
-        //DBG_PRINTF_TRACE("HOST DISCONNECTED ");
+        DBG_PRINTF_TRACE("HOST DISCONNECTED ");
         host_status.connection = Host_status::DISCONNECTED;
 
         systim_timer_set_ms(host_disconnected_timer, KsConfig::TIMEOUT_NO_CONNECTION);
