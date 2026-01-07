@@ -279,14 +279,18 @@ void Communications::init()
   });
 
   callbacks.bind(LAYER_KEYMAP_COLORS, [](Packet const &p) {
-
+    
     static uint8_t accumulated_leds = 0;
     static uint8_t current_layer = 0xFF;
 
     uint8_t layerIndex = p.data[0];
-    
+    bool has_more_packets = p.header.has_more_packets;
+
+    // DBG_PRINTF_TRACE("LAYER_KEYMAP_COLORS: layer=%d, size=%d, has_more=%d", 
+    //                  layerIndex, p.header.size, has_more_packets);
+
     // Mark that we're receiving multi-packet layers
-    if (p.header.has_more_packets) {
+    if (has_more_packets) {
       receiving_multipacket_layers = true;
     }
     
@@ -329,8 +333,9 @@ void Communications::init()
     accumulated_leds += leds_in_packet;
     
     // Only mark as complete if this is the last packet
-    if (!p.header.has_more_packets) {
-      if (layerIndex == 9) {
+    if (!has_more_packets) {
+      if (layerIndex == 9) 
+      {
         LEDManagement::layer_config_received.bl_layer = true;
         // Clear the flag when we finish receiving the last layer
         receiving_multipacket_layers = false;
