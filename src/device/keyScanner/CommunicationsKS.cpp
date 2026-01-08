@@ -284,10 +284,30 @@ void Communications::init()
     static uint8_t current_layer = 0xFF;
 
     uint8_t layerIndex = p.data[0];
-    bool has_more_packets = p.header.has_more_packets;
+    uint8_t size = p.header.size;
+    bool has_more_packets;
+    
+    // WORKAROUND: Determine has_more_packets based on packet size, ignoring the header flag
+    // The header's has_more_packets is for low-level SPI communication, not high-level layer logic.
+    // Logic:
+    // - Maximum packet payload is 28 bytes (+ 1 byte for layer index = 29 total in size)
+    // - If LAYER_PACKET_FULL_SIZE <= 29 (Defy: 19, Raise2: 20): Layer fits in one packet
+    //   → has_more_packets = false
+    // - If LAYER_PACKET_FULL_SIZE > 29 (Sonshi: 30): Layer needs multiple packets
+    //   → If size == 29: This is a full packet, more packets coming → has_more_packets = true
+    //   → If size < 29: This is the last partial packet → has_more_packets = false
+    constexpr uint8_t MAX_PACKET_SIZE = 29;  // 28 bytes data + 1 byte layer index
+    
+    if (KsConfig::LAYER_PACKET_FULL_SIZE <= MAX_PACKET_SIZE) {
+      // Layer fits in a single packet (Defy, Raise2)
+      has_more_packets = false;
+    } else {
+      // Layer requires multiple packets (Sonshi)
+      has_more_packets = (size >= MAX_PACKET_SIZE);  // true if full packet, false if partial
+    }
 
-    // DBG_PRINTF_TRACE("LAYER_KEYMAP_COLORS: layer=%d, size=%d, has_more=%d", 
-    //                  layerIndex, p.header.size, has_more_packets);
+    // DBG_PRINTF_TRACE("LAYER_KEYMAP_COLORS: layer=%d, size=%d, has_more=%d, accum=%d", 
+    //                  layerIndex, size, has_more_packets, accumulated_leds);
 
     // Mark that we're receiving multi-packet layers
     if (has_more_packets) {
@@ -300,7 +320,8 @@ void Communications::init()
       current_layer = layerIndex;
     }
     
-    if (layerIndex < LEDManagement::layers.size()) {
+    // Ensure the layers vector has enough capacity for this layer index
+    if (layerIndex >= LEDManagement::layers.size()) {
       LEDManagement::layers.emplace_back();
     }
     
@@ -337,6 +358,7 @@ void Communications::init()
       if (layerIndex == 9) 
       {
         LEDManagement::layer_config_received.bl_layer = true;
+        DBG_PRINTF_TRACE("Layer 9 complete, bl_layer=true, layers.size()=%d", LEDManagement::layers.size());
         // Clear the flag when we finish receiving the last layer
         receiving_multipacket_layers = false;
       }
