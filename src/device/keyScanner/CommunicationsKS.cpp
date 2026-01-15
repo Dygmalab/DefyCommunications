@@ -290,13 +290,13 @@ void Communications::init()
     // WORKAROUND: Determine has_more_packets based on packet size, ignoring the header flag
     // The header's has_more_packets is for low-level SPI communication, not high-level layer logic.
     // Logic:
-    // - Maximum packet payload is 28 bytes (+ 1 byte for layer index = 29 total in size)
-    // - If LAYER_PACKET_FULL_SIZE <= 29 (Defy: 19, Raise2: 20): Layer fits in one packet
+    // - p.header.size already includes the layer index byte, so max size in header is 28
+    // - If LAYER_PACKET_FULL_SIZE <= 28 (Defy: 19, Raise2: 20): Layer fits in one packet
     //   → has_more_packets = false
-    // - If LAYER_PACKET_FULL_SIZE > 29 (Sonshi: 30): Layer needs multiple packets
-    //   → If size == 29: This is a full packet, more packets coming → has_more_packets = true
-    //   → If size < 29: This is the last partial packet → has_more_packets = false
-    constexpr uint8_t MAX_PACKET_SIZE = 29;  // 28 bytes data + 1 byte layer index
+    // - If LAYER_PACKET_FULL_SIZE > 28 (Sonshi: 30): Layer needs multiple packets
+    //   → If size == 28: This is a full packet, more packets coming → has_more_packets = true
+    //   → If size < 28: This is the last partial packet → has_more_packets = false
+    constexpr uint8_t MAX_PACKET_SIZE = 28;  // Maximum size reported in p.header.size
     
     if (KsConfig::LAYER_PACKET_FULL_SIZE <= MAX_PACKET_SIZE) {
       // Layer fits in a single packet (Defy, Raise2)
@@ -359,6 +359,16 @@ void Communications::init()
       {
         LEDManagement::layer_config_received.bl_layer = true;
         DBG_PRINTF_TRACE("Layer 9 complete, bl_layer=true, layers.size()=%d", LEDManagement::layers.size());
+        
+        // Debug: Check first LED of layer 0 to verify data integrity
+        if (LEDManagement::layers.size() > 0) {
+          auto& layer0 = LEDManagement::layers[0];
+          uint8_t palette_idx = layer0.keyMap_leds[0];
+          DBG_PRINTF_TRACE("Layer0 LED[0]: palette_idx=%d, color r=%d g=%d b=%d", 
+                           palette_idx, LEDManagement::palette[palette_idx].r, 
+                           LEDManagement::palette[palette_idx].g, LEDManagement::palette[palette_idx].b);
+        }
+        
         // Clear the flag when we finish receiving the last layer
         receiving_multipacket_layers = false;
       }
