@@ -86,6 +86,7 @@ enum class Connection_status
 
     STATE_BLE_CONNECTION_START,
     STATE_BLE_CONNECTION_WAIT,
+    STATE_BLE_CONNECTED,
 
 //    IDLE,
 //    SET_USB_TIMER,
@@ -359,7 +360,7 @@ void INLINE _state_connection_mode_wait( void )
     {
         conn_state = Connection_status::STATE_USB_CONNECTION_START;
     }
-    else if( keyScanner.slideSwitchPositionBle() == true )
+    else if( keyScanner.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
     {
         conn_state = Connection_status::STATE_BLE_CONNECTION_START;
     }
@@ -401,7 +402,43 @@ void INLINE _state_ble_connection_start( void )
     /* Disable the USB */
     usb_disable();
 
+    /* Enable the BLE */
+    BleManager.enable();
+    BleManager.setForceBle(false);
+
+    comN2Side.ble_enable();
+
+    /* Wait for the BLE Host connection */
     conn_state = Connection_status::STATE_BLE_CONNECTION_WAIT;
+}
+
+void INLINE _state_ble_connection_wait()
+{
+    if( ble_innited() == false )
+    {
+        return;
+    }
+
+    _host_connected_set( true );
+    conn_state = Connection_status::STATE_BLE_CONNECTED;
+}
+
+void INLINE _state_ble_connected()
+{
+    if( ble_innited() == false )
+    {
+        /* Go back to the BLE Connection wait */
+        _host_connected_set( false );
+        conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+        return;
+    }
+
+    if(BleManager.get_pairing_key_press())
+    {
+        volatile bool stop_here = true;
+//        conn_state = Connection_status::IDLE;
+//        break;
+    }
 }
 
 void connection_state_machine( void )
@@ -440,7 +477,13 @@ void connection_state_machine( void )
 
         case Connection_status::STATE_BLE_CONNECTION_WAIT:
         {
+            _state_ble_connection_wait();
+        }
+        break;
 
+        case Connection_status::STATE_BLE_CONNECTED:
+        {
+            _state_ble_connected();
         }
         break;
 
@@ -455,7 +498,8 @@ void connection_state_machine( void )
 //void connection_state_machine ()
 //{
 //    //BLE STATUS
-//    static bool force_ble_enabled = BleManager.getForceBle();
+////    static bool force_ble_enabled = BleManager.getForceBle();
+//    static bool force_ble_enabled = true;
 //    static bool ble_denied = false;
 //
 //    //USB CONNECTION
@@ -511,6 +555,7 @@ void connection_state_machine( void )
 //            BleManager.enable();
 //
 //            BleManager.setForceBle(false);
+//            force_ble_enabled = false;
 //
 //
 //            comN2Side.ble_enable();
@@ -531,7 +576,7 @@ void connection_state_machine( void )
 //            }
 //            last_host_connection_check = millis();
 //
-//            if (!check_usb_connection() && !ble_innited())
+//            if (!usb_check_connection() && !ble_innited())
 //            {
 //                host_connected = false;
 //                conn_state = Connection_status::CHECK_WIRED_OR_WIRELESS;
