@@ -26,6 +26,7 @@
 #include "RFGW_communications.h"
 #include "WiredCommunication.hpp"
 #include "BatteryManagement.hpp"
+#include "BatteryInterface.h"
 #include "Keyscanner.hpp"
 #include "hal_mcu_systim.h"
 
@@ -468,6 +469,14 @@ void Communications::init()
 
 
   //Battery
+  callbacks.bind(BATTERY_LEVEL, [](const Packet &) {
+    BatteryInterface::batVoltageGet();
+  });
+
+  callbacks.bind(BATTERY_STATUS, [](const Packet &) {
+    BatteryInterface::chgStatusGet();
+  });
+
   callbacks.bind(BATTERY_SAVING, [](Packet const &p) {
    // DBG_PRINTF_TRACE("Received BATTERY_SAVING from %i with value %i", p.header.device, p.data[0]);
     BatteryManagement::set_battery_saving(p.data[0]);
