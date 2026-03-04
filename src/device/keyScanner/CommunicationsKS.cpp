@@ -454,7 +454,7 @@ void Communications::init()
         }
     }
     //DBG_PRINTF_TRACE("sleep enabled %i", p.data[2]);
-    host_status.sleep_enabled = p.data[2] != 1;
+    host_status.sleep_enabled = p.data[2];
   });
 
   callbacks.bind(CONFIGURATION, [](Packet const &p) {

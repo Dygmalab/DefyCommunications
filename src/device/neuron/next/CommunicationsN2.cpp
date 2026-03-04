@@ -443,7 +443,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.data[1]        = ble_innited();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-    packet.data[2]        =  (keyScanner.leftSideWiredConnection() && keyScanner.rightSideWiredConnection());
+    packet.data[2]        = keyScanner.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
     packet.data[3]       = false; // Shutdown LEDs. This will be true only for the WN. We dont want to show the disconnected LED effect.
 
     return sendPacket(packet);
