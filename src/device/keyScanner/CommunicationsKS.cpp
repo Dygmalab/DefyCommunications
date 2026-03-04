@@ -64,7 +64,7 @@ void goToSleep() {
   for (int i = 0; i < 100; ++i) {
     RFGateway::run();
   }
-  //BatteryManagement::goToSleep();
+  BatteryManagement::goToSleep();
 }
 
 void check_if_keyboard_is_wired_wireless()
