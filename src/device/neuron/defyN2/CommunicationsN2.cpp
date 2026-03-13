@@ -27,11 +27,11 @@
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
 #include "Radio_manager.h"
-#include "Kaleidoscope-IdleLEDsDefy.h"
 #include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
+#include "LEDManager.h"
 
 
 #define DEBUG_LOG_N2_COMMUNICATIONS     0
@@ -83,7 +83,7 @@ enum class Connection_status
     IDLE,
     SET_USB_TIMER,
     CHECK_FORCE_BLE,
-    INIT_BT,
+    ENABLE_BT,
     CHECK_USB_CONN,
     CHECK_WIRED_OR_WIRELESS,
     CHECK_USB_TIMER,
@@ -111,7 +111,7 @@ void checkActive();
 
 void new_connection_handle(void)
 {
-    IdleLEDsDefy.new_connection_set();
+    LEDManager.com_new_connection_set();
 }
 
 class RFGWCommunications {
@@ -146,8 +146,8 @@ class RFGWCommunications {
   }
 
   static void run() {
-    if (!kaleidoscope::plugin::RadioManager::isInited()) return;
-    kaleidoscope::plugin::RadioManager::poll();
+    if (!RadioManager.isInited()) return;
+    RadioManager.poll();
     comRfPipeLeft.run();
     comRfPipeRight.run();
   }
@@ -325,7 +325,7 @@ bool Communications::is_host_connected()
 void connection_state_machine ()
 {
     //BLE STATUS
-    static bool force_ble_enabled = _BleManager.getForceBle();
+    static bool force_ble_enabled = BleManager.getForceBle();
     static bool ble_denied = false;
 
     //USB CONNECTION
@@ -339,14 +339,14 @@ void connection_state_machine ()
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
 
     //CABLES CONNECTIONS
-    uint8_t bat_status_l = kaleidoscope::plugin::Battery::get_battery_status_left();
-    uint8_t bat_status_r = kaleidoscope::plugin::Battery::get_battery_status_right();
-    auto isDefyLeftWired = keyScanner.leftSideWiredConnection();
-    auto isDefyRightWired = keyScanner.rightSideWiredConnection();
+    uint8_t bat_status_l = Battery::get_battery_status_left();
+    uint8_t bat_status_r = Battery::get_battery_status_right();
+    auto isDygmaLeftWired = keyScanner.leftSideWiredConnection();
+    auto isDygmaRightWired = keyScanner.rightSideWiredConnection();
 
     //WIRELESS MODE STATUS
     bool bleInitiated = ble_innited();
-    bool radioInited = kaleidoscope::plugin::RadioManager::isInited();
+    bool radioInited = RadioManager.isInited();
 
     switch (conn_state)
     {
@@ -365,7 +365,7 @@ void connection_state_machine ()
             if(force_ble_enabled)
             {
                 //NRF_LOG_INFO("FORCE BLE ENABLED");
-                conn_state = Connection_status::INIT_BT;
+                conn_state = Connection_status::ENABLE_BT;
             }
             else
             {
@@ -374,13 +374,13 @@ void connection_state_machine ()
         }
         break;
 
-        case Connection_status::INIT_BT:
+        case Connection_status::ENABLE_BT:
         {
             //NRF_LOG_INFO("INIT BT");
             //Force connnect again just in case it was set as a device and not a host
-            _BleManager.init();
+            BleManager.enable();
 
-            _BleManager.setForceBle(false);
+            BleManager.setForceBle(false);
 
 
             comN2SideLeft.ble_enable();
@@ -413,15 +413,15 @@ void connection_state_machine ()
                 {
                     // We need to check if the sides are connected to the Neuron. if the Ble is initialized and we disconnect both sides, neuron will get stuck
                     // until we reconnect one side and quit the ble advertising mode.
-                    if(!isDefyLeftWired && !isDefyRightWired)
+                    if(!isDygmaLeftWired && !isDygmaRightWired)
                     {
                         // reset neuron to get out of the ble advertising mode. And start the radio manager.
                         conn_state = Connection_status::RESET_NEURON;
                     }
 
-                   ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                    LEDManager.led_effect_refresh();
                 }
-                if(_BleManager.get_pairing_key_press())
+                if(BleManager.get_pairing_key_press())
                 {
                     conn_state = Connection_status::IDLE;
                     break;
@@ -440,7 +440,7 @@ void connection_state_machine ()
             {
                 //NRF_LOG_INFO("MODE LED ASKED");
                 mode_led_requested = false;
-                ::LEDControl.set_mode(::LEDControl.get_mode_index()); //Send the mode to the KS.
+                LEDManager.led_effect_refresh(); //Send the mode to the KS.
             }
             else if(mode_led_requested == true && host_connected == false)
             {
@@ -466,14 +466,14 @@ void connection_state_machine ()
                 // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
                 if(!radioInited && !ble_innited())
                 {
-                    kaleidoscope::plugin::RadioManager::init();
+                    RadioManager.enable();
 
                     comN2SideLeft.rf_enable( &comRfPipeLeft );
                     comN2SideRight.rf_enable( &comRfPipeRight );
                 }
                 if (!ble_innited())
                 {
-                    ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                    LEDManager.led_effect_refresh();
                 }
                 conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
             }
@@ -527,9 +527,9 @@ void connection_state_machine ()
             1 o 2 -> Side connected and powered from the N2 while it is connected to the PC via USB.
             4 -> Side disconnected.
             */
-            bool isWiredMode = isDefyLeftWired && isDefyRightWired;
+            bool isWiredMode = isDygmaLeftWired && isDygmaRightWired;
 
-            bool isRFMode = !isDefyLeftWired && !isDefyRightWired;
+            bool isRFMode = !isDygmaLeftWired && !isDygmaRightWired;
 
             if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
             {
@@ -546,14 +546,14 @@ void connection_state_machine ()
 
                 //NRF_LOG_DEBUG("BLE mode allowed, one  sides disconnected from Neuron.");
 
-                conn_state = Connection_status::INIT_BT;
+                conn_state = Connection_status::ENABLE_BT;
             }
         }
         break;
 
         case Connection_status::PAIRING_MODE_KEY_CHECK:
         {
-            if(_BleManager.get_pairing_key_press())
+            if(BleManager.get_pairing_key_press())
             {
                 //NRF_LOG_INFO("Pairing key pressed");
                 conn_state = Connection_status::RESET_NEURON;
@@ -581,7 +581,7 @@ void connection_state_machine ()
             if(prev_host_connected != host_connected || host_connection_requested)
             {
                 //The only way to exit this state is by a reset. That will happend when the user press the pairing key and then the ESC key.
-                ::LEDControl.set_mode(::LEDControl.get_mode_index());
+                LEDManager.led_effect_refresh();
 
                   //Send the connected message to the KS.
                 NRF_LOG_INFO("Sending host connection Status");
@@ -656,7 +656,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.data[1]        = ble_innited();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-    packet.data[2]        =  (keyScanner.leftSideWiredConnection() && keyScanner.rightSideWiredConnection());
+    packet.data[2]        =  !keyScanner.leftSideWiredConnection() || !keyScanner.rightSideWiredConnection();   // Sleep is possible if at least one of the sides is not wire-connected
     packet.data[3]       = false; // Shutdown LEDs. This will be true only for the WN. We dont want to show the disconnected LED effect.
 
     return sendPacket(packet);

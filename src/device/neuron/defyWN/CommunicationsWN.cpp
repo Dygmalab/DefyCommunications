@@ -385,7 +385,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.header.size    = 4;
     packet.data[0]        = host_connected;
     packet.data[1]        = false; // BT disabled in WN.
-    packet.data[2]       = true; // We will always have both sides wired.
+    packet.data[2]       = false; // We will always have both sides wired. - Sleep mode disabled
     packet.data[3]       = true; // Shutdown LEDs. This is only for the WN. We dont want to show the disconnected LED effect
 
     return sendPacket(packet);
