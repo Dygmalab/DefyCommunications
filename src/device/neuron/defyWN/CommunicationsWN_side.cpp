@@ -133,6 +133,8 @@ inline bool ComWNSide::reconnect_needed( void )
 inline void ComWNSide::state_set( wn_side_state_t state )
 {
     this->state = state;
+
+    mcu_sleep_postpone();
 }
 
 inline void ComWNSide::state_set_disconnected( void )
