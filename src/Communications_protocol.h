@@ -61,8 +61,6 @@ enum Commands : uint8_t {
   PALETTE_COLORS,
   LAYER_KEYMAP_COLORS,
   LAYER_UNDERGLOW_COLORS,
-  GET_OPEN_LED,
-  GET_SHORT_LED,
   RETRY_LAYERS,
   //Battery
   BATTERY_LEVEL = 40,
@@ -74,6 +72,14 @@ enum Commands : uint8_t {
   //Host connection
   HOST_CONNECTION,
   HOST_CONNECTION_STATUS,
+  //Sonsei Production
+  PROD_ENABLE_TEST = 200,
+  PROD_SPI_TEST,
+  PROD_I2C_TEST,
+  PROD_LEDS_TEST,
+  PROD_BATTERY_TEST,
+  PROD_GET_OPEN_LED,
+  PROD_GET_SHORT_LED,
 };
 
 static_assert(sizeof(Commands) == sizeof(uint8_t));
