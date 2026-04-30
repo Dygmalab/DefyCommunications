@@ -248,6 +248,8 @@ inline bool ComN2Side::reconnect_needed( void )
 inline void ComN2Side::state_set( n2_side_state_t state )
 {
     this->state = state;
+
+    mcu_sleep_postpone();
 }
 
 inline void ComN2Side::state_set_disconnected( void )

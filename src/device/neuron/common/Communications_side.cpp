@@ -117,6 +117,8 @@ inline bool ComSide::disconnect_needed( void )
 inline void ComSide::state_set( side_state_t state )
 {
     this->state = state;
+
+    mcu_sleep_postpone();
 }
 
 inline void ComSide::state_set_disconnected( void )
