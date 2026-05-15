@@ -165,6 +165,8 @@ public:
     static inline void _com_spiPort_state_set( com_spiPort_t * p_com_spiPort, com_spiPort_state_t state )
     {
         p_com_spiPort->state = state;
+
+        mcu_sleep_postpone();
     }
 
     static void _com_spiPort_state_connected_set( com_spiPort_t * p_com_spiPort, ComN2Side * p_comN2Side )

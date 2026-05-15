@@ -288,7 +288,7 @@ void Communications::init()
     // - p.header.size already includes the layer index byte, so max size in header is 28
     // - If LAYER_PACKET_FULL_SIZE <= 28 (Defy: 19, Raise2: 20): Layer fits in one packet
     //   → has_more_packets = false
-    // - If LAYER_PACKET_FULL_SIZE > 28 (Sonshi: 30): Layer needs multiple packets
+    // - If LAYER_PACKET_FULL_SIZE > 28 (Sonsei: 30): Layer needs multiple packets
     //   → If size == 28: This is a full packet, more packets coming → has_more_packets = true
     //   → If size < 28: This is the last partial packet → has_more_packets = false
     constexpr uint8_t MAX_PACKET_SIZE = 28;  // Maximum size reported in p.header.size
@@ -297,7 +297,7 @@ void Communications::init()
       // Layer fits in a single packet (Defy, Raise2)
       has_more_packets = false;
     } else {
-      // Layer requires multiple packets (Sonshi)
+      // Layer requires multiple packets (Sonsei)
       has_more_packets = (size >= MAX_PACKET_SIZE);  // true if full packet, false if partial
     }
 
