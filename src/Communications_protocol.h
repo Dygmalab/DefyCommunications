@@ -82,6 +82,7 @@ enum Commands : uint8_t {
   PROD_BATTERY_TEST,
   PROD_GET_OPEN_LED,
   PROD_GET_SHORT_LED,
+  PROD_GET_POWER_VALUES,
 };
 
 static_assert(sizeof(Commands) == sizeof(uint8_t));
