@@ -269,13 +269,7 @@ void Communications::init()
   callbacks.bind(PALETTE_COLORS, [](Packet const &p)
   {
     //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
-    // p.data[0] = first color_id
-    // p.data[1...] = color data (color_size * color_cnt bytes)
-    // NOTE: Neuron sends header.size = color_size * color_cnt (without color_id byte)
-    // So we copy exactly p.header.size bytes from p.data[1]
-    uint8_t color_id = p.data[0];
-    uint8_t bytes_to_copy = p.header.size;  // This is color_size * color_cnt
-    memcpy(&LEDManagement::palette[color_id], &p.data[1], bytes_to_copy);
+    memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
     LEDManagement::layer_config_received.palette = true;
   });
 
