@@ -270,7 +270,7 @@ public:
 
 
 void Communications::get_keyscanner_configuration(){
-  NRF_LOG_DEBUG("Sending configuration command to KS (broadcast)");
+  //NRF_LOG_DEBUG("Sending configuration command to KS (broadcast)");
   Communications_protocol::Packet p{};
   p.header.size = 1;
   p.header.command = Communications_protocol::CONFIGURATION;
@@ -301,7 +301,7 @@ void Communications::init()
 
   callbacks.bind(MODE_LED, [this](Packet p)
   {
-          NRF_LOG_INFO("MODE LED ASKED");
+          //NRF_LOG_INFO("MODE LED ASKED");
           mode_led_requested = true;
   });
 
