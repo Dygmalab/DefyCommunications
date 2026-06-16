@@ -192,20 +192,6 @@ void Communications::init()
     sendPacket(p);
   });
 
-  callbacks.bind(GET_SHORT_LED, [this](Packet p) {
-/*    DBG_PRINTF_TRACE("Received GET_SHORT_LED from %i ", p.header.device);
-    Packet packet{};
-    packet.header.size = IS31FL3743B::get_short_leds(packet.data);
-    sendPacket(packet);*/
-  });
-
-  callbacks.bind(GET_OPEN_LED, [this](Packet p) {
-/*    DBG_PRINTF_TRACE("Received GET_OPEN_LED from %i ", p.header.device);
-    Packet packet{};
-    packet.header.size = IS31FL3743B::get_open_leds(packet.data);
-    sendPacket(packet);*/
-  });
-
   callbacks.bind(BRIGHTNESS, [](Packet const &p) {
 
     LEDManagement::layer_config_received.brightness = true;
@@ -268,8 +254,8 @@ void Communications::init()
 
   callbacks.bind(PALETTE_COLORS, [](Packet const &p)
   {
-    //DBG_PRINTF_TRACE("Received PALETTE_COLORS from %i ", p.header.device);
     memcpy(&LEDManagement::palette[p.data[0]], &p.data[1], p.header.size - 1);
+
     LEDManagement::layer_config_received.palette = true;
   });
 
