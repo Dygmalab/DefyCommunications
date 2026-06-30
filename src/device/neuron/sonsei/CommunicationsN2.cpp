@@ -251,7 +251,7 @@ bool usb_check_connection()
 
 bool Communications::is_host_connected()
 {
-    return host_connected || ble_connected();
+    return host_connected || BleManager.is_enabled();
 }
 
 void INLINE _host_connected_set( bool status )
@@ -313,7 +313,7 @@ void INLINE _state_ble_connection_start( void )
 
     /* Enable the BLE */
     BleManager.enable();
-    BleManager.setForceBle(false);
+    BleManager.force_ble_set(false);
 
     comN2Side.ble_enable();
 
@@ -323,7 +323,7 @@ void INLINE _state_ble_connection_start( void )
 
 void INLINE _state_ble_connection_wait()
 {
-    if( ble_innited() == false )
+    if( BleManager.is_enabled() == false )
     {
         return;
     }
@@ -334,7 +334,7 @@ void INLINE _state_ble_connection_wait()
 
 void INLINE _state_ble_connected()
 {
-    if( ble_innited() == false )
+    if( BleManager.is_enabled() == false )
     {
         /* Go back to the BLE Connection wait */
         _host_connected_set( false );
@@ -442,7 +442,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.header.size    = 4;
     // Send host connection status.
     packet.data[0]        = host_connected;
-    packet.data[1]        = ble_innited();
+    packet.data[1]        = BleManager.is_enabled();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
     packet.data[2]        = keyScanner.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
