@@ -442,7 +442,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.header.size    = 4;
     // Send host connection status.
     packet.data[0]        = host_connected;
-    packet.data[1]        = BleManager.is_connected();
+    packet.data[1]        = BleManager.is_enabled();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
     packet.data[2]        = keyScanner.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
