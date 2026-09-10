@@ -67,9 +67,11 @@ enum class Connection_status
     STATE_USB_CONNECTION_WAIT,
     STATE_USB_CONNECTED,
 
-    STATE_BLE_CONNECTION_START,
+    STATE_BLE_ENABLE,
+    STATE_BLE_ENABLE_WAIT,
     STATE_BLE_CONNECTION_WAIT,
     STATE_BLE_CONNECTED,
+    STATE_BLE_FAILED,
 
 }conn_state = Connection_status::STATE_CONNECTION_MODE_WAIT;
 
@@ -207,6 +209,12 @@ void Communications::init()
 
     /* Send the Host connection info */
     sendPacketHostConnection( );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+        /* Reset the BLE connection process */
+        conn_state = Connection_status::STATE_BLE_ENABLE;
+    }
   });
 
   callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
@@ -251,6 +259,7 @@ bool usb_check_connection()
 
 bool Communications::is_host_connected()
 {
+#warning "Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
     return host_connected || BleManager.is_enabled();
 }
 
@@ -271,7 +280,7 @@ void INLINE _state_connection_mode_wait( void )
     }
     else if( keyScanner.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
     {
-        conn_state = Connection_status::STATE_BLE_CONNECTION_START;
+        conn_state = Connection_status::STATE_BLE_ENABLE;
     }
 }
 
@@ -306,7 +315,7 @@ void INLINE _state_usb_connected( void )
     }
 }
 
-void INLINE _state_ble_connection_start( void )
+void INLINE _state_ble_enable( void )
 {
     /* Disable the USB */
     usb_disable();
@@ -318,12 +327,30 @@ void INLINE _state_ble_connection_start( void )
     comN2Side.ble_enable();
 
     /* Wait for the BLE Host connection */
+    conn_state = Connection_status::STATE_BLE_ENABLE_WAIT;
+}
+
+void INLINE _state_ble_enable_wait( void )
+{
+    if( BleManager.is_enabled() == false )
+    {
+        return;
+    }
+
+    /* Wait for the BLE Host connection */
     conn_state = Connection_status::STATE_BLE_CONNECTION_WAIT;
 }
 
 void INLINE _state_ble_connection_wait()
 {
-    if( BleManager.is_connected() == false )
+    if ( BleManager.is_enabled() == false )
+    {
+        /* This may happen if the BLE is either deliberately disabled from elsewhere or if its advertising failed in its search for a peer to connect to.
+         * Move to the BLE Fail state and wait CONNECTED message from the keyscanner. */
+        conn_state = Connection_status::STATE_BLE_FAILED;
+        return;
+    }
+    else if( BleManager.is_connected() == false )
     {
         return;
     }
@@ -371,9 +398,15 @@ void connection_state_machine( void )
         }
         break;
 
-        case Connection_status::STATE_BLE_CONNECTION_START:
+        case Connection_status::STATE_BLE_ENABLE:
         {
-            _state_ble_connection_start();
+            _state_ble_enable();
+        }
+        break;
+
+        case Connection_status::STATE_BLE_ENABLE_WAIT:
+        {
+            _state_ble_enable_wait();
         }
         break;
 
@@ -386,6 +419,12 @@ void connection_state_machine( void )
         case Connection_status::STATE_BLE_CONNECTED:
         {
             _state_ble_connected();
+        }
+        break;
+
+        case Connection_status::STATE_BLE_FAILED:
+        {
+            /* Waiting for the next CONNECTED message from the keyscanner */
         }
         break;
 
