@@ -276,6 +276,34 @@ void INLINE _state_set( Connection_status connection_status )
     mcu_sleep_postpone();
 }
 
+void INLINE _state_usb_connection_wait_set( void )
+{
+    _host_connected_set( false );
+    _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
+}
+
+void INLINE _state_usb_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_USB_CONNECTED );
+}
+
+void INLINE _state_ble_connection_wait_set( void )
+{
+    /*
+     * This is HACK: in BLE mode, we fake the "host connected" state to prevent keyscanner going to sleep after its internal fixed timeout (40 seconds)
+     *               we should eventually fix the logic of this both on Neuron and Keyscanner side.
+     */
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
+}
+
+void INLINE _state_ble_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTED );
+}
+
 void INLINE _state_connection_mode_wait( void )
 {
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
@@ -293,7 +321,7 @@ void INLINE _state_connection_mode_wait( void )
 void INLINE _state_usb_connection_start( void )
 {
     /* Just move to the next state, the USB is started elsewhere by default */
-    _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
+    _state_usb_connection_wait_set( );
 }
 
 void INLINE _state_usb_connection_wait( void )
@@ -303,8 +331,7 @@ void INLINE _state_usb_connection_wait( void )
         return;
     }
 
-    _host_connected_set( true );
-    _state_set( Connection_status::STATE_USB_CONNECTED );
+    _state_usb_connected_set( );
 }
 
 void INLINE _state_usb_connected( void )
@@ -314,8 +341,7 @@ void INLINE _state_usb_connected( void )
     if ( usb_check_connection() == false )
     {
         /* Go back to the USB Connection wait */
-        _host_connected_set( false );
-        _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
+        _state_usb_connection_wait_set( );
         return;
     }
 }
@@ -343,7 +369,7 @@ void INLINE _state_ble_enable_wait( void )
     }
 
     /* Wait for the BLE Host connection */
-    _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
+    _state_ble_connection_wait_set();
 }
 
 void INLINE _state_ble_connection_wait()
@@ -360,8 +386,7 @@ void INLINE _state_ble_connection_wait()
         return;
     }
 
-    _host_connected_set( true );
-    _state_set( Connection_status::STATE_BLE_CONNECTED );
+    _state_ble_connected_set( );
 }
 
 void INLINE _state_ble_connected()
@@ -369,8 +394,8 @@ void INLINE _state_ble_connected()
     if( BleManager.is_connected() == false )
     {
         /* Go back to the BLE Connection wait */
-        _host_connected_set( false );
-        _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
+        _state_ble_connection_wait_set();
+
         return;
     }
 }
