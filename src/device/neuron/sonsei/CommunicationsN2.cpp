@@ -270,25 +270,30 @@ void INLINE _host_connected_set( bool status )
     Communications.sendPacketHostConnection( );
 }
 
+void INLINE _state_set( Connection_status connection_status )
+{
+    conn_state = connection_status;
+    mcu_sleep_postpone();
+}
+
 void INLINE _state_connection_mode_wait( void )
 {
     auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
 
     if( keyScanner.slideSwitchPositionUsb() == true )
     {
-        conn_state = Connection_status::STATE_USB_CONNECTION_START;
+        _state_set( Connection_status::STATE_USB_CONNECTION_START );
     }
     else if( keyScanner.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
     {
-        conn_state = Connection_status::STATE_BLE_ENABLE;
+        _state_set( Connection_status::STATE_BLE_ENABLE );
     }
 }
 
 void INLINE _state_usb_connection_start( void )
 {
     /* Just move to the next state, the USB is started elsewhere by default */
-
-    conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+    _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
 }
 
 void INLINE _state_usb_connection_wait( void )
@@ -299,7 +304,7 @@ void INLINE _state_usb_connection_wait( void )
     }
 
     _host_connected_set( true );
-    conn_state = Connection_status::STATE_USB_CONNECTED;
+    _state_set( Connection_status::STATE_USB_CONNECTED );
 }
 
 void INLINE _state_usb_connected( void )
@@ -310,7 +315,7 @@ void INLINE _state_usb_connected( void )
     {
         /* Go back to the USB Connection wait */
         _host_connected_set( false );
-        conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+        _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
         return;
     }
 }
@@ -327,7 +332,7 @@ void INLINE _state_ble_enable( void )
     comN2Side.ble_enable();
 
     /* Wait for the BLE Host connection */
-    conn_state = Connection_status::STATE_BLE_ENABLE_WAIT;
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
 void INLINE _state_ble_enable_wait( void )
@@ -338,7 +343,7 @@ void INLINE _state_ble_enable_wait( void )
     }
 
     /* Wait for the BLE Host connection */
-    conn_state = Connection_status::STATE_BLE_CONNECTION_WAIT;
+    _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
 }
 
 void INLINE _state_ble_connection_wait()
@@ -347,7 +352,7 @@ void INLINE _state_ble_connection_wait()
     {
         /* This may happen if the BLE is either deliberately disabled from elsewhere or if its advertising failed in its search for a peer to connect to.
          * Move to the BLE Fail state and wait CONNECTED message from the keyscanner. */
-        conn_state = Connection_status::STATE_BLE_FAILED;
+        _state_set( Connection_status::STATE_BLE_FAILED );
         return;
     }
     else if( BleManager.is_connected() == false )
@@ -356,7 +361,7 @@ void INLINE _state_ble_connection_wait()
     }
 
     _host_connected_set( true );
-    conn_state = Connection_status::STATE_BLE_CONNECTED;
+    _state_set( Connection_status::STATE_BLE_CONNECTED );
 }
 
 void INLINE _state_ble_connected()
@@ -365,7 +370,7 @@ void INLINE _state_ble_connected()
     {
         /* Go back to the BLE Connection wait */
         _host_connected_set( false );
-        conn_state = Connection_status::STATE_BLE_CONNECTION_WAIT;
+        _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
         return;
     }
 }
