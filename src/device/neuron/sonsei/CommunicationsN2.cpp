@@ -417,6 +417,9 @@ void INLINE _state_ble_connected( void )
 
 void INLINE _state_ble_reenable( void )
 {
+    /* Re-enable the leds */
+    LEDManager.leds_enable();
+
     /* Enable the BLE */
     BleManager.enable();
 
@@ -506,9 +509,6 @@ static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi
 
     if( conn_state == Connection_status::STATE_BLE_FAILED )
     {
-//        /* Re-enable the leds */
-//        LEDManager.leds_enable();
-
         /* Reset the BLE connection process */
         _state_set( Connection_status::STATE_BLE_REENABLE );
     }
