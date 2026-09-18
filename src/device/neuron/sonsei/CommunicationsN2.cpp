@@ -25,6 +25,9 @@
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
 #include "Kbd_manager.h"
+#include "kbd_if.h"
+#include "kbd_if_manager.h"
+#include "keyboard_api.h"
 #include "LEDManager.h"
 
 
@@ -72,13 +75,19 @@ enum class Connection_status
     STATE_BLE_CONNECTION_WAIT,
     STATE_BLE_CONNECTED,
     STATE_BLE_FAILED,
+    STATE_BLE_REENABLE,
 
 }conn_state = Connection_status::STATE_CONNECTION_MODE_WAIT;
 
 //HOST CONNECTION STATUS
 static bool host_connected = false;
 
-void checkActive();
+/* Keyboard interface */
+static kbdif_t * p_kbdif;
+
+//void checkActive();
+void INLINE _state_set( Connection_status connection_status );
+static result_t kbdif_initialize( void );
 
 void new_connection_handle(void)
 {
@@ -199,6 +208,8 @@ void Communications::get_keyscanner_configuration(){
 
 void Communications::init()
 {
+  result_t result = RESULT_ERR;
+
   callbacks.bind(CONNECTED, [this](Packet p) {
 
 #if DEBUG_LOG_N2_COMMUNICATIONS
@@ -213,7 +224,7 @@ void Communications::init()
     if( conn_state == Connection_status::STATE_BLE_FAILED )
     {
         /* Reset the BLE connection process */
-        conn_state = Connection_status::STATE_BLE_ENABLE;
+        _state_set( Connection_status::STATE_BLE_REENABLE );
     }
   });
 
@@ -235,6 +246,12 @@ void Communications::init()
   });
 
   WiredCommunications::init();
+
+  /* Initialize the keyboard interface */
+  result = kbdif_initialize( );
+  ASSERT_DYGMA( result == RESULT_OK, "kbdif_initialize failed" );
+
+  UNUSED( result );
 }
 
 void usb_disable( void )
@@ -370,7 +387,7 @@ void INLINE _state_ble_enable_wait( void )
     _state_ble_connection_wait_set();
 }
 
-void INLINE _state_ble_connection_wait()
+void INLINE _state_ble_connection_wait( void )
 {
     if ( BleManager.is_enabled() == false )
     {
@@ -387,7 +404,7 @@ void INLINE _state_ble_connection_wait()
     _state_ble_connected_set( );
 }
 
-void INLINE _state_ble_connected()
+void INLINE _state_ble_connected( void )
 {
     if( BleManager.is_connected() == false )
     {
@@ -396,6 +413,15 @@ void INLINE _state_ble_connected()
 
         return;
     }
+}
+
+void INLINE _state_ble_reenable( void )
+{
+    /* Enable the BLE */
+    BleManager.enable();
+
+    /* Wait for the BLE Host connection */
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
 void connection_state_machine( void )
@@ -452,7 +478,13 @@ void connection_state_machine( void )
 
         case Connection_status::STATE_BLE_FAILED:
         {
-            /* Waiting for the next CONNECTED message from the keyscanner */
+            /* Waiting for the next keypress or CONNECTED message from the keyscanner */
+        }
+        break;
+
+        case Connection_status::STATE_BLE_REENABLE:
+        {
+            _state_ble_reenable();
         }
         break;
 
@@ -463,6 +495,57 @@ void connection_state_machine( void )
         break;
     }
 }
+
+/****************************************************/
+/*                Keyboard Interface                */
+/****************************************************/
+
+static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi_key_t * p_key )
+{
+    ASSERT_DYGMA( p_instance == NULL, "Unexpected kbdif_key_event_callback p_instance - should be NULL" );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+//        /* Re-enable the leds */
+//        LEDManager.leds_enable();
+
+        /* Reset the BLE connection process */
+        _state_set( Connection_status::STATE_BLE_REENABLE );
+    }
+
+    return KBDAPI_EVENT_RESULT_IGNORED;
+}
+
+static const kbdif_handlers_t kbdif_handlers =
+{
+    .key_event_cb = kbdif_key_event_callback,
+    .command_event_cb = NULL,
+};
+
+static result_t kbdif_initialize( void )
+{
+    result_t result = RESULT_ERR;
+    kbdif_conf_t config;
+
+    /* Prepare the kbdif configuration */
+    config.p_instance = NULL;
+    config.handlers = &kbdif_handlers;
+
+    /* Initialize the kbdif */
+    result = kbdif_init( &p_kbdif, &config );
+    EXIT_IF_ERR( result, "kbdif_init failed" );
+
+    /* Add the kbdif into the kbdif manager */
+    result = kbdifmgr_add( p_kbdif );
+    EXIT_IF_ERR( result, "kbdifmgr_add failed" );
+
+_EXIT:
+    return result;
+}
+
+/****************************************************/
+/*                       API                        */
+/****************************************************/
 
 void Communications::run()
 {
