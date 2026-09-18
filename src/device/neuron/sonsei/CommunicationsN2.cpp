@@ -21,10 +21,10 @@
 #include "CRC_wrapper.h"
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
-#include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
+#include "Kbd_manager.h"
 #include "LEDManager.h"
 
 
@@ -306,13 +306,11 @@ void INLINE _state_ble_connected_set( void )
 
 void INLINE _state_connection_mode_wait( void )
 {
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-
-    if( keyScanner.slideSwitchPositionUsb() == true )
+    if( kbdManager.slideSwitchPositionUsb() == true )
     {
         _state_set( Connection_status::STATE_USB_CONNECTION_START );
     }
-    else if( keyScanner.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
+    else if( kbdManager.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
     {
         _state_set( Connection_status::STATE_BLE_ENABLE );
     }
@@ -513,8 +511,7 @@ bool Communications::sendPacketHostConnection( void )
     packet.data[0]        = host_connected;
     packet.data[1]        = BleManager.is_enabled();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-    packet.data[2]        = keyScanner.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
+    packet.data[2]        = kbdManager.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
     packet.data[3]       = false; // Shutdown LEDs. This will be true only for the WN. We dont want to show the disconnected LED effect.
 
     return sendPacket(packet);
