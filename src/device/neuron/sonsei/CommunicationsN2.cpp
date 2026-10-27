@@ -21,10 +21,13 @@
 #include "CRC_wrapper.h"
 #include "Arduino.h"
 #include "Adafruit_USBD_Device.h"
-#include "Kaleidoscope-LEDControl.h"
 #include "Battery.h"
 #include "Ble_manager.h"
 #include "FirmwareVersion.h"
+#include "Kbd_manager.h"
+#include "kbd_if.h"
+#include "kbd_if_manager.h"
+#include "keyboard_api.h"
 #include "LEDManager.h"
 
 
@@ -67,16 +70,24 @@ enum class Connection_status
     STATE_USB_CONNECTION_WAIT,
     STATE_USB_CONNECTED,
 
-    STATE_BLE_CONNECTION_START,
+    STATE_BLE_ENABLE,
+    STATE_BLE_ENABLE_WAIT,
     STATE_BLE_CONNECTION_WAIT,
     STATE_BLE_CONNECTED,
+    STATE_BLE_FAILED,
+    STATE_BLE_REENABLE,
 
 }conn_state = Connection_status::STATE_CONNECTION_MODE_WAIT;
 
 //HOST CONNECTION STATUS
 static bool host_connected = false;
 
-void checkActive();
+/* Keyboard interface */
+static kbdif_t * p_kbdif;
+
+//void checkActive();
+void INLINE _state_set( Connection_status connection_status );
+static result_t kbdif_initialize( void );
 
 void new_connection_handle(void)
 {
@@ -197,6 +208,8 @@ void Communications::get_keyscanner_configuration(){
 
 void Communications::init()
 {
+  result_t result = RESULT_ERR;
+
   callbacks.bind(CONNECTED, [this](Packet p) {
 
 #if DEBUG_LOG_N2_COMMUNICATIONS
@@ -207,6 +220,12 @@ void Communications::init()
 
     /* Send the Host connection info */
     sendPacketHostConnection( );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+        /* Reset the BLE connection process */
+        _state_set( Connection_status::STATE_BLE_REENABLE );
+    }
   });
 
   callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
@@ -227,6 +246,12 @@ void Communications::init()
   });
 
   WiredCommunications::init();
+
+  /* Initialize the keyboard interface */
+  result = kbdif_initialize( );
+  ASSERT_DYGMA( result == RESULT_OK, "kbdif_initialize failed" );
+
+  UNUSED( result );
 }
 
 void usb_disable( void )
@@ -251,7 +276,8 @@ bool usb_check_connection()
 
 bool Communications::is_host_connected()
 {
-    return host_connected || ble_connected();
+#warning "Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+    return host_connected || BleManager.is_enabled();
 }
 
 void INLINE _host_connected_set( bool status )
@@ -261,25 +287,56 @@ void INLINE _host_connected_set( bool status )
     Communications.sendPacketHostConnection( );
 }
 
+void INLINE _state_set( Connection_status connection_status )
+{
+    conn_state = connection_status;
+    mcu_sleep_postpone();
+}
+
+void INLINE _state_usb_connection_wait_set( void )
+{
+    _host_connected_set( false );
+    _state_set( Connection_status::STATE_USB_CONNECTION_WAIT );
+}
+
+void INLINE _state_usb_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_USB_CONNECTED );
+}
+
+void INLINE _state_ble_connection_wait_set( void )
+{
+    /*
+     * This is HACK: in BLE mode, we fake the "host connected" state to prevent keyscanner going to sleep after its internal fixed timeout (40 seconds)
+     *               we should eventually fix the logic of this both on Neuron and Keyscanner side.
+     */
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
+}
+
+void INLINE _state_ble_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTED );
+}
+
 void INLINE _state_connection_mode_wait( void )
 {
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-
-    if( keyScanner.slideSwitchPositionUsb() == true )
+    if( kbdManager.slideSwitchPositionUsb() == true )
     {
-        conn_state = Connection_status::STATE_USB_CONNECTION_START;
+        _state_set( Connection_status::STATE_USB_CONNECTION_START );
     }
-    else if( keyScanner.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
+    else if( kbdManager.slideSwitchPositionBle() == true /*&& FirmwareVersion::keyboard_is_wireless() == true*/ )
     {
-        conn_state = Connection_status::STATE_BLE_CONNECTION_START;
+        _state_set( Connection_status::STATE_BLE_ENABLE );
     }
 }
 
 void INLINE _state_usb_connection_start( void )
 {
     /* Just move to the next state, the USB is started elsewhere by default */
-
-    conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+    _state_usb_connection_wait_set( );
 }
 
 void INLINE _state_usb_connection_wait( void )
@@ -289,8 +346,7 @@ void INLINE _state_usb_connection_wait( void )
         return;
     }
 
-    _host_connected_set( true );
-    conn_state = Connection_status::STATE_USB_CONNECTED;
+    _state_usb_connected_set( );
 }
 
 void INLINE _state_usb_connected( void )
@@ -300,47 +356,75 @@ void INLINE _state_usb_connected( void )
     if ( usb_check_connection() == false )
     {
         /* Go back to the USB Connection wait */
-        _host_connected_set( false );
-        conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+        _state_usb_connection_wait_set( );
         return;
     }
 }
 
-void INLINE _state_ble_connection_start( void )
+void INLINE _state_ble_enable( void )
 {
     /* Disable the USB */
     usb_disable();
 
     /* Enable the BLE */
     BleManager.enable();
-    BleManager.setForceBle(false);
+    BleManager.force_ble_set(false);
 
     comN2Side.ble_enable();
 
     /* Wait for the BLE Host connection */
-    conn_state = Connection_status::STATE_BLE_CONNECTION_WAIT;
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
-void INLINE _state_ble_connection_wait()
+void INLINE _state_ble_enable_wait( void )
 {
-    if( ble_innited() == false )
+    if( BleManager.is_enabled() == false )
     {
         return;
     }
 
-    _host_connected_set( true );
-    conn_state = Connection_status::STATE_BLE_CONNECTED;
+    /* Wait for the BLE Host connection */
+    _state_ble_connection_wait_set();
 }
 
-void INLINE _state_ble_connected()
+void INLINE _state_ble_connection_wait( void )
 {
-    if( ble_innited() == false )
+    if ( BleManager.is_enabled() == false )
+    {
+        /* This may happen if the BLE is either deliberately disabled from elsewhere or if its advertising failed in its search for a peer to connect to.
+         * Move to the BLE Fail state and wait CONNECTED message from the keyscanner. */
+        _state_set( Connection_status::STATE_BLE_FAILED );
+        return;
+    }
+    else if( BleManager.is_connected() == false )
+    {
+        return;
+    }
+
+    _state_ble_connected_set( );
+}
+
+void INLINE _state_ble_connected( void )
+{
+    if( BleManager.is_connected() == false )
     {
         /* Go back to the BLE Connection wait */
-        _host_connected_set( false );
-        conn_state = Connection_status::STATE_USB_CONNECTION_WAIT;
+        _state_ble_connection_wait_set();
+
         return;
     }
+}
+
+void INLINE _state_ble_reenable( void )
+{
+    /* Re-enable the leds */
+    LEDManager.leds_enable();
+
+    /* Enable the BLE */
+    BleManager.enable();
+
+    /* Wait for the BLE Host connection */
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
 void connection_state_machine( void )
@@ -371,9 +455,15 @@ void connection_state_machine( void )
         }
         break;
 
-        case Connection_status::STATE_BLE_CONNECTION_START:
+        case Connection_status::STATE_BLE_ENABLE:
         {
-            _state_ble_connection_start();
+            _state_ble_enable();
+        }
+        break;
+
+        case Connection_status::STATE_BLE_ENABLE_WAIT:
+        {
+            _state_ble_enable_wait();
         }
         break;
 
@@ -389,6 +479,18 @@ void connection_state_machine( void )
         }
         break;
 
+        case Connection_status::STATE_BLE_FAILED:
+        {
+            /* Waiting for the next keypress or CONNECTED message from the keyscanner */
+        }
+        break;
+
+        case Connection_status::STATE_BLE_REENABLE:
+        {
+            _state_ble_reenable();
+        }
+        break;
+
         default:
         {
             ASSERT_DYGMA( false, "Unhandled communication connection status" );
@@ -396,6 +498,54 @@ void connection_state_machine( void )
         break;
     }
 }
+
+/****************************************************/
+/*                Keyboard Interface                */
+/****************************************************/
+
+static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi_key_t * p_key )
+{
+    ASSERT_DYGMA( p_instance == NULL, "Unexpected kbdif_key_event_callback p_instance - should be NULL" );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+        /* Reset the BLE connection process */
+        _state_set( Connection_status::STATE_BLE_REENABLE );
+    }
+
+    return KBDAPI_EVENT_RESULT_IGNORED;
+}
+
+static const kbdif_handlers_t kbdif_handlers =
+{
+    .key_event_cb = kbdif_key_event_callback,
+    .command_event_cb = NULL,
+};
+
+static result_t kbdif_initialize( void )
+{
+    result_t result = RESULT_ERR;
+    kbdif_conf_t config;
+
+    /* Prepare the kbdif configuration */
+    config.p_instance = NULL;
+    config.handlers = &kbdif_handlers;
+
+    /* Initialize the kbdif */
+    result = kbdif_init( &p_kbdif, &config );
+    EXIT_IF_ERR( result, "kbdif_init failed" );
+
+    /* Add the kbdif into the kbdif manager */
+    result = kbdifmgr_add( p_kbdif );
+    EXIT_IF_ERR( result, "kbdifmgr_add failed" );
+
+_EXIT:
+    return result;
+}
+
+/****************************************************/
+/*                       API                        */
+/****************************************************/
 
 void Communications::run()
 {
@@ -442,10 +592,9 @@ bool Communications::sendPacketHostConnection( void )
     packet.header.size    = 4;
     // Send host connection status.
     packet.data[0]        = host_connected;
-    packet.data[1]        = ble_innited();
+    packet.data[1]        = BleManager.is_enabled();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-    packet.data[2]        = keyScanner.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
+    packet.data[2]        = kbdManager.slideSwitchPositionBle();        // The sleep mode is possible in the BLE mode
     packet.data[3]       = false; // Shutdown LEDs. This will be true only for the WN. We dont want to show the disconnected LED effect.
 
     return sendPacket(packet);
