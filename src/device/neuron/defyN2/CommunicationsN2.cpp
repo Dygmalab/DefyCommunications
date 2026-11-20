@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Dygma Lab S.L.
+ * Copyright (C) 2026  Dygma Lab S.L.
  *
  * This program is free software: you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -13,37 +13,27 @@
  * You should have received a copy of the GNU General Public License along with
  * this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * Author: Gustavo Gomez Lopez @Noteolvides
- *
  */
 
-#ifdef NRF52_ARCH
-#include "Communications.h"
-#include "Communications_rf_pipe.h"
-#include "CommunicationsN2_side.h"
-#include "SpiPort.h"
-#include "rf_host_device_api.h"
-#include "CRC_wrapper.h"
-#include "Arduino.h"
+
 #include "Adafruit_USBD_Device.h"
-#include "Radio_manager.h"
-#include "Kaleidoscope-LEDControl.h"
-#include "Battery.h"
+#include "Arduino.h"
 #include "Ble_manager.h"
+#include "Communications.h"
+#include "CommunicationsN2_side.h"
 #include "FirmwareVersion.h"
+#include "kbd_if.h"
+#include "kbd_if_manager.h"
+#include "Kbd_manager.h"
 #include "LEDManager.h"
+#include "SpiPort.h"
+#include "Radio_manager.h"
+#include "Time_counter.h"
 
+//#define DEBUG_LOG_N2_COMMUNICATIONS     0
 
-#define DEBUG_LOG_N2_COMMUNICATIONS     0
-
-#define PORT_IS_ALIVE_TIMEOUT_MS        2000
-
-// This interval exist to prevent the host to be connected and disconnected too fast when the user is pluging and unplugging the USB cable.
-#define HOST_CONNECTION_CHECK_INTERVAL  250
-
-#define USB_CONNECTION_TIMEOUT         500
-
-#define USB_CONNECTION_MARGIN          100
+#define USB_CONNECTION_TIMEOUT_MS       500
+#define USB_RECONNECTION_TIMEOUT_MS     1000
 
 typedef enum
 {
@@ -69,45 +59,39 @@ static ComRfPipe comRfPipeRight( RFGW_PIPE_ID_KEYSCANNER_RIGHT );
 static com_spiPort_t com_spiPort1 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort1, .p_comN2Side = NULL };
 static com_spiPort_t com_spiPort2 = { .state = COM_SPIPORT_STATE_DISCONNECTED, .p_spiPort = &spiPort2, .p_comN2Side = NULL };
 
-static bool host_connection_requested = false;
-
-enum class HostConnectionStatus
-{
-    HOST_CONNECTED,
-    CHECK_CONNECTION,
-    WAIT_RESPONSE
-} host_connection_status;
-
 enum class Connection_status
 {
-    IDLE,
-    SET_USB_TIMER,
-    CHECK_FORCE_BLE,
-    ENABLE_BT,
-    CHECK_USB_CONN,
-    CHECK_WIRED_OR_WIRELESS,
-    CHECK_USB_TIMER,
-    CHECK_NEURON_CONNECTORS,
-    RESET_NEURON,
-    HOST_CONNECTED,
-    PAIRING_MODE_KEY_CHECK
+    STATE_IDLE = 1,
+    STATE_CONNECTION_MODE_WAIT,
 
-}conn_state = Connection_status::SET_USB_TIMER;
+    STATE_USB_CONNECTION_START,
+    STATE_USB_CONNECTED,
+    STATE_USB_RECONNECTION_WAIT,
 
-enum class Side
-{
-    LEFT = 1,
-    RIGHT,
-    BOTH,
-    NONE
-};
+    STATE_BLE_ENABLE,
+    STATE_BLE_ENABLE_WAIT,
+    STATE_BLE_CONNECTION_WAIT,
+    STATE_BLE_CONNECTED,
+    STATE_BLE_FAILED,
+    STATE_BLE_REENABLE,
 
-bool mode_led_requested = false;
+    STATE_RESET_NEEDED,
+
+}conn_state;
+
+/* Timer */
+static dl_timer_t timer_usb_connection;
 
 //HOST CONNECTION STATUS
 static bool host_connected = false;
 
-void checkActive();
+/* Keyboard interface */
+static kbdif_t * p_kbdif;
+
+//void checkActive();
+void INLINE _state_set( Connection_status connection_status );
+void INLINE _state_connection_mode_wait_set( void );
+static result_t kbdif_initialize( void );
 
 void new_connection_handle(void)
 {
@@ -280,6 +264,8 @@ void Communications::get_keyscanner_configuration(){
 
 void Communications::init()
 {
+  result_t result = RESULT_ERR;
+
   callbacks.bind(CONNECTED, [this](Packet p) {
 
 #if DEBUG_LOG_N2_COMMUNICATIONS
@@ -290,329 +276,461 @@ void Communications::init()
 
     /* Send the Host connection info */
     sendPacketHostConnection( );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+        /* Reset the BLE connection process */
+        _state_set( Connection_status::STATE_BLE_REENABLE );
+    }
   });
 
   callbacks.bind(HOST_CONNECTION_STATUS, [this](Packet p)
   {
       //Keyscanner will ask for the host connection.
       //NRF_LOG_INFO("HOST CONNECTION ASKED");
-      host_connection_requested = true;
+      sendPacketHostConnection( );
   });
 
   callbacks.bind(MODE_LED, [this](Packet p)
   {
-          //NRF_LOG_INFO("MODE LED ASKED");
-          mode_led_requested = true;
+      //NRF_LOG_INFO("MODE LED ASKED");
+      if( host_connected == true )
+      {
+          /* Refreshing only if the host is connected */
+          LEDManager.led_effect_refresh(); //Send the mode to the KS.
+      }
   });
 
   WiredCommunications::init();
   RFGWCommunications::init();
+
+  /* Initialize the keyboard interface */
+  result = kbdif_initialize( );
+  ASSERT_DYGMA( result == RESULT_OK, "kbdif_initialize failed" );
+
+  /* Start with searching for the connection mode */
+  _state_connection_mode_wait_set();
+
+  UNUSED( result );
 }
 
-/*
- * This function is called when the USB is connected or disconnected.
- * For the moment it only logs the event.
- * We will use it to decide if we send the disconnect message to the host. Or not.
- */
-bool check_usb_connection()
+void usb_disable( void )
+{
+    TinyUSBDevice.detach();
+#ifdef USE_TINYUSB
+    TinyUSB_Device_FlushCDC();
+#endif
+//    if(!Serial) Serial.begin(115200);
+//    RawHID.flush();
+}
+
+bool usb_check_connection()
 {
     return  tud_ready();
 }
 
 bool Communications::is_host_connected()
 {
-    return host_connected || ble_connected();
+#warning "Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+    return host_connected || BleManager.is_enabled();
+}
+
+void INLINE _host_connected_set( bool status )
+{
+    /* Set the new host_connected status */
+    host_connected = status;
+    Communications.sendPacketHostConnection( );
+}
+
+bool INLINE _mode_ble_resolve( void )
+{
+//    uint8_t bat_status_l;
+//    uint8_t bat_status_r;
+    bool isDygmaLeftWired;
+    bool isDygmaRightWired;
+    bool isWiredMode;
+    bool isRFMode;
+
+    /* Check if the BLE is being forced */
+    if( BleManager.force_ble_get() == true )
+    {
+        return true;
+    }
+
+    /* Check if the keyboard is wireless */
+    if( FirmwareVersion.keyboard_is_wireless() == false )
+    {
+        return false;
+    }
+
+    /* Check if the USB is connected */
+    if( usb_check_connection() == true )
+    {
+        return false;
+    }
+
+    /* Check if the USB connection timer has expired */
+    if( timer_check( &timer_usb_connection ) == false )
+    {
+        return false;
+    }
+
+//    /* Check the cable connections
+//     *
+//     * Battery status explanation:
+//     * ---------------------------
+//     * 0 -> Side connected and powered from its battery or the other side's battery.
+//     * 1 o 2 -> Side connected and powered from the N2 while it is connected to the PC via USB.
+//     * 4 -> Side disconnected.
+//     */
+//
+//    bat_status_l = Battery::get_battery_status_left();
+//    bat_status_r = Battery::get_battery_status_right();
+
+    isDygmaLeftWired = kbdManager.leftSideWiredConnection();
+    isDygmaRightWired = kbdManager.rightSideWiredConnection();
+
+    /*
+     * These are special configurations to prevent keyboard going to the BLE advertising when computer goes to sleep.
+     * The premise is that in Wired keyboard use the people have both keyscanners usually connected, in RF mode both
+     * keyscanners are usually disconnected.
+     */
+    isWiredMode = isDygmaLeftWired && isDygmaRightWired;
+    isRFMode = !isDygmaLeftWired && !isDygmaRightWired;
+
+#warning "Testing the connections without evaluating the battery status"
+//    if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
+    if ( isWiredMode || isRFMode)
+    {
+        //Both sides are connected or disconnected from Neuron. We will not start the BLE automatically.
+
+        return false;
+    }
+
+    /* The bluetooth mode is resolved */
+    return true;
+}
+
+bool INLINE _mode_usb_resolve( void )
+{
+    /* Simply check if the USB is connected */
+    return usb_check_connection();
+}
+
+void INLINE _state_set( Connection_status connection_status )
+{
+    conn_state = connection_status;
+    mcu_sleep_postpone();
+}
+
+void INLINE _state_connection_mode_wait_set( void )
+{
+    timer_set_ms( &timer_usb_connection, USB_CONNECTION_TIMEOUT_MS );
+    _state_set( Connection_status::STATE_CONNECTION_MODE_WAIT );
+}
+
+void INLINE _state_usb_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_USB_CONNECTED );
+}
+
+void INLINE _state_usb_reconnection_wait_set( void )
+{
+    /*
+     * We do not signal the host disconnection right away. Giving time to refresh
+     */
+    //_host_connected_set( false );
+    timer_set_ms( &timer_usb_connection, USB_RECONNECTION_TIMEOUT_MS );
+    _state_set( Connection_status::STATE_USB_RECONNECTION_WAIT );
+}
+
+void INLINE _state_ble_connection_wait_set( void )
+{
+    /*
+     * This is HACK: in BLE mode, we fake the "host connected" state to prevent keyscanner going to sleep after its internal fixed timeout (40 seconds)
+     *               we should eventually fix the logic of this both on Neuron and Keyscanner side.
+     */
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
+}
+
+void INLINE _state_ble_connected_set( void )
+{
+    _host_connected_set( true );
+    _state_set( Connection_status::STATE_BLE_CONNECTED );
+}
+
+void INLINE _state_connection_mode_wait( void )
+{
+    if( _mode_ble_resolve() == true )
+    {
+        _state_set( Connection_status::STATE_BLE_ENABLE );
+    }
+    else if( _mode_usb_resolve() == true )
+    {
+        _state_set( Connection_status::STATE_USB_CONNECTION_START );
+    }
+}
+
+void INLINE _state_usb_connection_start( void )
+{
+    /* Enable the RF communication channel */
+    RadioManager.enable();
+
+    comN2SideLeft.rf_enable( &comRfPipeLeft );
+    comN2SideRight.rf_enable( &comRfPipeRight );
+
+    /* Just move to the Connected state, the USB is started elsewhere by default */
+    _state_usb_connected_set( );
+}
+
+void INLINE _state_usb_connected( void )
+{
+    if ( _mode_usb_resolve() == false )
+    {
+        /* The conditions for the USB mode are not valid any more. Giving chance for reconnection */
+        _state_usb_reconnection_wait_set( );
+        return;
+    }
+}
+
+void INLINE _state_usb_reconnection_wait( void )
+{
+    if ( _mode_usb_resolve() == true )
+    {
+        /* The conditions for the USB mode have refreshed. Moving back to the Connected state */
+        _state_usb_connected_set( );
+        return;
+    }
+    else if( timer_check( &timer_usb_connection ) == false )
+    {
+        return;
+    }
+
+    /* The reconnection timeout has expired. We need to reset the device to let the connection mode re-evaluate */
+    _state_set( Connection_status::STATE_RESET_NEEDED );
+}
+
+void INLINE _state_ble_enable( void )
+{
+    /* Disable the USB */
+    usb_disable();
+
+    /* Enable the BLE */
+    BleManager.enable();
+    BleManager.force_ble_set(false);
+
+    comN2SideLeft.ble_enable();
+    comN2SideRight.ble_enable();
+
+    /* Wait for the BLE Host connection */
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
+}
+
+void INLINE _state_ble_enable_wait( void )
+{
+    if( BleManager.is_enabled() == false )
+    {
+        return;
+    }
+
+    /* Wait for the BLE Host connection */
+    _state_ble_connection_wait_set();
+}
+
+void INLINE _state_ble_connection_wait( void )
+{
+    if( _mode_ble_resolve() == false )
+    {
+        /* The conditions for the BLE mode are not valid any more. We need to reset the device to let the connection mode re-evaluate */
+        _state_set( Connection_status::STATE_RESET_NEEDED );
+        return;
+    }
+    else if ( BleManager.is_enabled() == false )
+    {
+        /* This may happen if the BLE is either deliberately disabled from elsewhere or if its advertising failed in its search for a peer to connect to.
+         * Move to the BLE Fail state and wait CONNECTED message from the keyscanner. */
+        _state_set( Connection_status::STATE_BLE_FAILED );
+        return;
+    }
+    else if( BleManager.is_connected() == false )
+    {
+        return;
+    }
+
+    _state_ble_connected_set( );
+}
+
+void INLINE _state_ble_connected( void )
+{
+    if( _mode_ble_resolve() == false )
+    {
+        /* The conditions for the BLE mode are not valid any more. We need to reset the device to let the connection mode re-evaluate */
+        _state_set( Connection_status::STATE_RESET_NEEDED );
+        return;
+    }
+    else if( BleManager.is_connected() == false )
+    {
+        /* Go back to the BLE Connection wait */
+        _state_ble_connection_wait_set();
+
+        return;
+    }
+}
+
+void INLINE _state_ble_reenable( void )
+{
+    /* Re-enable the leds */
+    LEDManager.leds_enable();
+
+    /* Enable the BLE */
+    BleManager.enable();
+
+    /* Wait for the BLE Host connection */
+    _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
+}
+
+void INLINE _state_reset_needed( void )
+{
+    /* Restart the device */
+    reset_mcu();
 }
 
 void connection_state_machine ()
 {
-    //BLE STATUS
-    static bool force_ble_enabled = BleManager.getForceBle();
-    static bool ble_denied = false;
-
-    //USB CONNECTION
-    volatile uint32_t usbConnectionTime = 0;
-
-    //HOST CONNECTION
-    static bool prev_host_connected = false;
-    static uint32_t last_host_connection_check = 0;
-
-    // KEYSCANNER INSTANCE
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-
-    //CABLES CONNECTIONS
-    uint8_t bat_status_l = Battery::get_battery_status_left();
-    uint8_t bat_status_r = Battery::get_battery_status_right();
-    auto isDygmaLeftWired = keyScanner.leftSideWiredConnection();
-    auto isDygmaRightWired = keyScanner.rightSideWiredConnection();
-
-    //WIRELESS MODE STATUS
-    bool bleInitiated = ble_innited();
-    bool radioInited = RadioManager.isInited();
-
-    switch (conn_state)
+    switch( conn_state )
     {
-        case Connection_status::SET_USB_TIMER:
-        {
-            //NRF_LOG_INFO("SET USB TIMER");
-            usbConnectionTime = millis();
-            conn_state = Connection_status::CHECK_FORCE_BLE;
-        }
-        break;
+        case Connection_status::STATE_CONNECTION_MODE_WAIT:
 
-        case Connection_status::CHECK_FORCE_BLE:
-        {
-            //NRF_LOG_INFO("CHECK FORCE BLE");
-            //If the force ble is enable, we must go into advertising mode, ignoring the USB.
-            if(force_ble_enabled)
-            {
-                //NRF_LOG_INFO("FORCE BLE ENABLED");
-                conn_state = Connection_status::ENABLE_BT;
-            }
-            else
-            {
-                conn_state = Connection_status::CHECK_USB_CONN;
-            }
-        }
-        break;
+            _state_connection_mode_wait();
 
-        case Connection_status::ENABLE_BT:
-        {
-            //NRF_LOG_INFO("INIT BT");
-            //Force connnect again just in case it was set as a device and not a host
-            BleManager.enable();
+            break;
 
-            BleManager.setForceBle(false);
+        case Connection_status::STATE_USB_CONNECTION_START:
 
+            _state_usb_connection_start();
 
-            comN2SideLeft.ble_enable();
-            comN2SideRight.ble_enable();
+            break;
 
-            ble_denied = false; //We will restart the BLE denied flag when we connect to BT due to the press of the pairing key. This will allow the BLE to be enabled again if the Neuron is disconnected.
+        case Connection_status::STATE_USB_CONNECTED:
 
-            conn_state = Connection_status::CHECK_USB_CONN;
-        }
-        break;
+            _state_usb_connected();
 
-        case Connection_status::CHECK_USB_CONN:
-        {
-             //Small debouncer for the connection check.
-            if (millis() - last_host_connection_check < HOST_CONNECTION_CHECK_INTERVAL)
-            {
-                return;
-            }
-            last_host_connection_check = millis();
+            break;
 
-            if (!check_usb_connection() && !ble_innited())
-            {
-                host_connected = false;
-                conn_state = Connection_status::CHECK_WIRED_OR_WIRELESS;
-            }
-            else
-            {
-                host_connected = true;
-                if (ble_connected() || ble_is_advertising_mode())
-                {
-                    // We need to check if the sides are connected to the Neuron. if the Ble is initialized and we disconnect both sides, neuron will get stuck
-                    // until we reconnect one side and quit the ble advertising mode.
-                    if(!isDygmaLeftWired && !isDygmaRightWired)
-                    {
-                        // reset neuron to get out of the ble advertising mode. And start the radio manager.
-                        conn_state = Connection_status::RESET_NEURON;
-                    }
+        case Connection_status::STATE_USB_RECONNECTION_WAIT:
 
-                    LEDManager.led_effect_refresh();
-                }
-                if(BleManager.get_pairing_key_press())
-                {
-                    conn_state = Connection_status::IDLE;
-                    break;
-                }
-            }
+            _state_usb_reconnection_wait();
 
-            // host_connection_requested will be true if the KS has requested the host connection.
-            if(prev_host_connected != host_connected || host_connection_requested == true)
-            {
-                //NRF_LOG_INFO("Host connection changed or requested");
-                // This will override the previous state.
-                conn_state = Connection_status::HOST_CONNECTED;
-            }
+            break;
 
-            if(mode_led_requested == true && host_connected == true && !force_ble_enabled)
-            {
-                //NRF_LOG_INFO("MODE LED ASKED");
-                mode_led_requested = false;
-                LEDManager.led_effect_refresh(); //Send the mode to the KS.
-            }
-            else if(mode_led_requested == true && host_connected == false)
-            {
-                //NRF_LOG_INFO("MODE LED ASKED BUT HOST DISCONNECTED OR BLE ACTIVE");
-                mode_led_requested = false;
-            }
+        case Connection_status::STATE_BLE_ENABLE:
 
-        }
-        break;
+            _state_ble_enable();
 
-        case Connection_status::HOST_CONNECTED:
-        {
-            if (host_connected == false)
-            {
-                //NRF_LOG_INFO("Host DISCONNECTED");
-                last_host_connection_check = millis();
-                conn_state = Connection_status::CHECK_WIRED_OR_WIRELESS;
-            }
-            else
-            {
-                //NRF_LOG_INFO("Host CONNECTED");
+            break;
 
-                // If the host is connected with USB AND we didn't initilialize the ble or we dont't have any side connected we need to initialize the radio manager.
-                if(!radioInited && !ble_innited())
-                {
-                    RadioManager.enable();
+        case Connection_status::STATE_BLE_ENABLE_WAIT:
 
-                    comN2SideLeft.rf_enable( &comRfPipeLeft );
-                    comN2SideRight.rf_enable( &comRfPipeRight );
-                }
-                if (!ble_innited())
-                {
-                    LEDManager.led_effect_refresh();
-                }
-                conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
-            }
-            //Send the connected message to the KS.
-            //NRF_LOG_INFO("Sending host connection Status");
+            _state_ble_enable_wait();
 
-            Communications.sendPacketHostConnection( );
-            //**************************************
-            prev_host_connected = host_connected;
-            host_connection_requested = false;
-        }
-        break;
+            break;
 
-        case Connection_status::CHECK_WIRED_OR_WIRELESS:
-        {
-            //NRF_LOG_INFO("CHECK WIRED OR WIRELESS");
+        case Connection_status::STATE_BLE_CONNECTION_WAIT:
 
-            if(FirmwareVersion.keyboard_is_wireless())
-            {
-                //NRF_LOG_INFO("CHECK USB TIMER");
-                conn_state = Connection_status::CHECK_USB_TIMER;
-            }
-            else
-            {
-                //NRF_LOG_INFO("KEYBOARD IS WIRED ONLY");
-                conn_state = Connection_status::CHECK_USB_CONN;
-            }
-        }
-        break;
+            _state_ble_connection_wait();
 
-        case Connection_status::CHECK_USB_TIMER:
-        {
-            if( (millis() - usbConnectionTime > USB_CONNECTION_TIMEOUT  && !bleInitiated) || force_ble_enabled)
-            {
-                //NRF_LOG_INFO("+++++USB CONNECTION TIMEOUT++++");
-                conn_state = Connection_status::CHECK_NEURON_CONNECTORS;
-            }
-            else
-            {
-                //NRF_LOG_INFO("USB CHECK TIMER FALSE");
-                conn_state = Connection_status::CHECK_USB_CONN;
-            }
-        }
-        break;
+            break;
 
-        case Connection_status::CHECK_NEURON_CONNECTORS:
-        {
-            //NRF_LOG_INFO("CHECK NEURON CONNECTORS");
-            /*
-            0 -> Side connected and powered from its battery or the other side's battery.
-            1 o 2 -> Side connected and powered from the N2 while it is connected to the PC via USB.
-            4 -> Side disconnected.
-            */
-            bool isWiredMode = isDygmaLeftWired && isDygmaRightWired;
+        case Connection_status::STATE_BLE_CONNECTED:
 
-            bool isRFMode = !isDygmaLeftWired && !isDygmaRightWired;
+            _state_ble_connected();
 
-            if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
-            {
-                //Both sides are connected or disconnected from Neuron. We will not start the BLE automatically.
+            break;
 
-                //NRF_LOG_DEBUG("BLE mode denied both sides connected");
-                ble_denied = true;
-                conn_state = Connection_status::PAIRING_MODE_KEY_CHECK;
-            }
+        case Connection_status::STATE_BLE_FAILED:
 
-            if(!ble_denied)
-            {
-                //One sides are disconnected from Neuron. We will start the BLE automatically.
+            /* Waiting for the next keypress or CONNECTED message from the keyscanner */
 
-                //NRF_LOG_DEBUG("BLE mode allowed, one  sides disconnected from Neuron.");
+            break;
 
-                conn_state = Connection_status::ENABLE_BT;
-            }
-        }
-        break;
+        case Connection_status::STATE_BLE_REENABLE:
 
-        case Connection_status::PAIRING_MODE_KEY_CHECK:
-        {
-            if(BleManager.get_pairing_key_press())
-            {
-                //NRF_LOG_INFO("Pairing key pressed");
-                conn_state = Connection_status::RESET_NEURON;
-            }
-            else
-            {
-                conn_state = Connection_status::CHECK_USB_CONN;
-            }
-        }
-        break;
+            _state_ble_reenable();
 
-        case Connection_status::RESET_NEURON:
-        {
-            NRF_LOG_INFO("RESET NEURON");
-            //We will reset the Neuron to start the BLE.
-            reset_mcu();
-            //Just in case the reset takes too long we will go to the next state and wait.
-            conn_state = Connection_status::IDLE;
-        }
-        break;
+            break;
 
-        case Connection_status::IDLE:
-        {
+        case Connection_status::STATE_RESET_NEEDED:
 
-            if(prev_host_connected != host_connected || host_connection_requested)
-            {
-                //The only way to exit this state is by a reset. That will happend when the user press the pairing key and then the ESC key.
-                LEDManager.led_effect_refresh();
+            _state_reset_needed();
 
-                  //Send the connected message to the KS.
-                NRF_LOG_INFO("Sending host connection Status");
-
-                Communications.sendPacketHostConnection( );
-                //**************************************
-                prev_host_connected = host_connected;
-                host_connection_requested = false;
-            }
-            //Here the BLE_manager plugin will be initialized and send the corresponding ble led mode.
-        }
-        break;
+            break;
 
         default:
-            NRF_LOG_INFO("Unknown state in connection_state_machine");
-        break;
 
+            ASSERT_DYGMA( false, "Unhandled communication connection status" );
 
+            break;
     }
 }
 
+/****************************************************/
+/*                Keyboard Interface                */
+/****************************************************/
+
+static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi_key_t * p_key )
+{
+    ASSERT_DYGMA( p_instance == NULL, "Unexpected kbdif_key_event_callback p_instance - should be NULL" );
+
+    if( conn_state == Connection_status::STATE_BLE_FAILED )
+    {
+        /* Reset the BLE connection process */
+        _state_set( Connection_status::STATE_BLE_REENABLE );
+    }
+
+    return KBDAPI_EVENT_RESULT_IGNORED;
+}
+
+static const kbdif_handlers_t kbdif_handlers =
+{
+    .key_event_cb = kbdif_key_event_callback,
+    .command_event_cb = NULL,
+};
+
+static result_t kbdif_initialize( void )
+{
+    result_t result = RESULT_ERR;
+    kbdif_conf_t config;
+
+    /* Prepare the kbdif configuration */
+    config.p_instance = NULL;
+    config.handlers = &kbdif_handlers;
+
+    /* Initialize the kbdif */
+    result = kbdif_init( &p_kbdif, &config );
+    EXIT_IF_ERR( result, "kbdif_init failed" );
+
+    /* Add the kbdif into the kbdif manager */
+    result = kbdifmgr_add( p_kbdif );
+    EXIT_IF_ERR( result, "kbdifmgr_add failed" );
+
+_EXIT:
+    return result;
+}
+
+/****************************************************/
+/*                       API                        */
+/****************************************************/
+
 void Communications::run()
 {
-  WiredCommunications::run();
-  RFGWCommunications::run();
-  connection_state_machine();
+    WiredCommunications::run();
+    RFGWCommunications::run();
+    connection_state_machine();
 
-  comN2SideLeft.run();
-  comN2SideRight.run();
+    comN2SideLeft.run();
+    comN2SideRight.run();
 }
 
 bool Communications::isWiredLeftAlive()
@@ -643,8 +761,6 @@ bool Communications::sendPacket(Packet packet)
     }
 
     return result;
-
-  return true;
 }
 
 bool Communications::sendPacketHostConnection( void )
@@ -655,16 +771,12 @@ bool Communications::sendPacketHostConnection( void )
     packet.header.size    = 4;
     // Send host connection status.
     packet.data[0]        = host_connected;
-    packet.data[1]        = ble_innited();
+    packet.data[1]        = BleManager.is_enabled();
     // We will decide if Keyscanner is allowed to go to sleep if we don't have the host connected. This will depend on the Neuron connection to the KS sides.
-    auto const &keyScanner = kaleidoscope::Runtime.device().keyScanner();
-    packet.data[2]        =  !keyScanner.leftSideWiredConnection() || !keyScanner.rightSideWiredConnection();   // Sleep is possible if at least one of the sides is not wire-connected
+    packet.data[2]        =  !kbdManager.leftSideWiredConnection() || !kbdManager.rightSideWiredConnection();   // Sleep is possible if at least one of the sides is not wire-connected
     packet.data[3]       = false; // Shutdown LEDs. This will be true only for the WN. We dont want to show the disconnected LED effect.
 
     return sendPacket(packet);
 }
 
 class Communications Communications;
-
-
-#endif

@@ -375,8 +375,6 @@ bool Communications::sendPacket(Packet packet)
     }
 
     return result;
-
-  return true;
 }
 
 bool Communications::sendPacketHostConnection( void )
