@@ -276,7 +276,9 @@ bool usb_check_connection()
 
 bool Communications::is_host_connected()
 {
-#warning "Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+    /*
+     * Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+     */
     return host_connected || BleManager.is_enabled();
 }
 

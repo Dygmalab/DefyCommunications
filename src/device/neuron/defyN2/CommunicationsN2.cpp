@@ -79,19 +79,30 @@ enum class Connection_status
 
 }conn_state;
 
+enum class Connection_mode
+{
+    CONN_MODE_UNKNOWN = 1,
+    CONN_MODE_USB,
+    CONN_MODE_BLE,
+}conn_mode;
+
+
 /* Timer */
 static dl_timer_t timer_usb_connection;
 
-//HOST CONNECTION STATUS
+/* HOST CONNECTION STATUS */
 static bool host_connected = false;
+
+/* Forced BLE */
+static bool forced_ble_flag = false;
 
 /* Keyboard interface */
 static kbdif_t * p_kbdif;
 
 //void checkActive();
-void INLINE _state_set( Connection_status connection_status );
-void INLINE _state_connection_mode_wait_set( void );
-static result_t kbdif_initialize( void );
+INLINE void _state_set( Connection_status connection_status );
+INLINE void _state_connection_mode_wait_set( void );
+static INLINE result_t kbdif_initialize( void );
 
 void new_connection_handle(void)
 {
@@ -308,6 +319,9 @@ void Communications::init()
   result = kbdif_initialize( );
   ASSERT_DYGMA( result == RESULT_OK, "kbdif_initialize failed" );
 
+  /* The connection mode is unknown initially */
+  conn_mode = Connection_mode::CONN_MODE_UNKNOWN;
+
   /* Start with searching for the connection mode */
   _state_connection_mode_wait_set();
 
@@ -331,18 +345,20 @@ bool usb_check_connection()
 
 bool Communications::is_host_connected()
 {
-#warning "Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+    /*
+     * Using the BleManager.is_enabled here is a hack to allow the bond pin to be entered"
+     */
     return host_connected || BleManager.is_enabled();
 }
 
-void INLINE _host_connected_set( bool status )
+INLINE void _host_connected_set( bool status )
 {
     /* Set the new host_connected status */
     host_connected = status;
     Communications.sendPacketHostConnection( );
 }
 
-bool INLINE _mode_ble_resolve( void )
+INLINE bool _mode_ble_resolve( void )
 {
 //    uint8_t bat_status_l;
 //    uint8_t bat_status_r;
@@ -351,11 +367,17 @@ bool INLINE _mode_ble_resolve( void )
     bool isWiredMode;
     bool isRFMode;
 
+/*
+ * NOTE: The Forced BLE is now set when the actual connection mode is not known yet and thus can trigger the Forced BLE
+ *       mode without storing the flag in the BleManager memory and restarting the system. After the approach is approved,
+ *       remove the commented force_ble_get condition and clean the code.
+ */
+
     /* Check if the BLE is being forced */
-    if( BleManager.force_ble_get() == true )
-    {
-        return true;
-    }
+//    if( BleManager.force_ble_get() == true )
+//    {
+//        return true;
+//    }
 
     /* Check if the keyboard is wireless */
     if( FirmwareVersion.keyboard_is_wireless() == false )
@@ -367,6 +389,12 @@ bool INLINE _mode_ble_resolve( void )
     if( usb_check_connection() == true )
     {
         return false;
+    }
+
+    /* Check if the BLE is being forced */
+    if( forced_ble_flag == true )
+    {
+        return true;
     }
 
     /* Check if the USB connection timer has expired */
@@ -398,7 +426,10 @@ bool INLINE _mode_ble_resolve( void )
     isWiredMode = isDygmaLeftWired && isDygmaRightWired;
     isRFMode = !isDygmaLeftWired && !isDygmaRightWired;
 
-#warning "Testing the connections without evaluating the battery status"
+    /*
+     * NOTE: We do not evaluate battery status any more and check the connections only with the state of the physical wired
+     *       connection status. After the approach is approved, remove the commented battery condition and clean the code.
+     */
 //    if ( (bat_status_l == 1 || bat_status_l == 2 || bat_status_r == 1 || bat_status_r == 2) || isWiredMode || isRFMode)
     if ( isWiredMode || isRFMode)
     {
@@ -411,31 +442,39 @@ bool INLINE _mode_ble_resolve( void )
     return true;
 }
 
-bool INLINE _mode_usb_resolve( void )
+INLINE bool _mode_usb_resolve( void )
 {
     /* Simply check if the USB is connected */
     return usb_check_connection();
 }
 
-void INLINE _state_set( Connection_status connection_status )
+INLINE void _state_set( Connection_status connection_status )
 {
     conn_state = connection_status;
     mcu_sleep_postpone();
 }
 
-void INLINE _state_connection_mode_wait_set( void )
+INLINE void _state_connection_mode_wait_set( void )
 {
     timer_set_ms( &timer_usb_connection, USB_CONNECTION_TIMEOUT_MS );
     _state_set( Connection_status::STATE_CONNECTION_MODE_WAIT );
 }
 
-void INLINE _state_usb_connected_set( void )
+INLINE void _state_usb_connection_start_set( void )
+{
+    /* Set the USB connection mode */
+    conn_mode = Connection_mode::CONN_MODE_USB;
+
+    _state_set( Connection_status::STATE_USB_CONNECTION_START );
+}
+
+INLINE void _state_usb_connected_set( void )
 {
     _host_connected_set( true );
     _state_set( Connection_status::STATE_USB_CONNECTED );
 }
 
-void INLINE _state_usb_reconnection_wait_set( void )
+INLINE void _state_usb_reconnection_wait_set( void )
 {
     /*
      * We do not signal the host disconnection right away. Giving time to refresh
@@ -445,7 +484,15 @@ void INLINE _state_usb_reconnection_wait_set( void )
     _state_set( Connection_status::STATE_USB_RECONNECTION_WAIT );
 }
 
-void INLINE _state_ble_connection_wait_set( void )
+INLINE void _state_ble_enable_set( void )
+{
+    /* Set the BLE connection mode */
+    conn_mode = Connection_mode::CONN_MODE_BLE;
+
+    _state_set( Connection_status::STATE_BLE_ENABLE );
+}
+
+INLINE void _state_ble_connection_wait_set( void )
 {
     /*
      * This is HACK: in BLE mode, we fake the "host connected" state to prevent keyscanner going to sleep after its internal fixed timeout (40 seconds)
@@ -455,25 +502,25 @@ void INLINE _state_ble_connection_wait_set( void )
     _state_set( Connection_status::STATE_BLE_CONNECTION_WAIT );
 }
 
-void INLINE _state_ble_connected_set( void )
+INLINE void _state_ble_connected_set( void )
 {
     _host_connected_set( true );
     _state_set( Connection_status::STATE_BLE_CONNECTED );
 }
 
-void INLINE _state_connection_mode_wait( void )
+INLINE void _state_connection_mode_wait( void )
 {
     if( _mode_ble_resolve() == true )
     {
-        _state_set( Connection_status::STATE_BLE_ENABLE );
+        _state_ble_enable_set();
     }
     else if( _mode_usb_resolve() == true )
     {
-        _state_set( Connection_status::STATE_USB_CONNECTION_START );
+        _state_usb_connection_start_set();
     }
 }
 
-void INLINE _state_usb_connection_start( void )
+INLINE void _state_usb_connection_start( void )
 {
     /* Enable the RF communication channel */
     RadioManager.enable();
@@ -485,7 +532,7 @@ void INLINE _state_usb_connection_start( void )
     _state_usb_connected_set( );
 }
 
-void INLINE _state_usb_connected( void )
+INLINE void _state_usb_connected( void )
 {
     if ( _mode_usb_resolve() == false )
     {
@@ -495,7 +542,7 @@ void INLINE _state_usb_connected( void )
     }
 }
 
-void INLINE _state_usb_reconnection_wait( void )
+INLINE void _state_usb_reconnection_wait( void )
 {
     if ( _mode_usb_resolve() == true )
     {
@@ -512,7 +559,7 @@ void INLINE _state_usb_reconnection_wait( void )
     _state_set( Connection_status::STATE_RESET_NEEDED );
 }
 
-void INLINE _state_ble_enable( void )
+INLINE void _state_ble_enable( void )
 {
     /* Disable the USB */
     usb_disable();
@@ -528,7 +575,7 @@ void INLINE _state_ble_enable( void )
     _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
-void INLINE _state_ble_enable_wait( void )
+INLINE void _state_ble_enable_wait( void )
 {
     if( BleManager.is_enabled() == false )
     {
@@ -539,7 +586,7 @@ void INLINE _state_ble_enable_wait( void )
     _state_ble_connection_wait_set();
 }
 
-void INLINE _state_ble_connection_wait( void )
+INLINE void _state_ble_connection_wait( void )
 {
     if( _mode_ble_resolve() == false )
     {
@@ -562,7 +609,7 @@ void INLINE _state_ble_connection_wait( void )
     _state_ble_connected_set( );
 }
 
-void INLINE _state_ble_connected( void )
+INLINE void _state_ble_connected( void )
 {
     if( _mode_ble_resolve() == false )
     {
@@ -579,7 +626,7 @@ void INLINE _state_ble_connected( void )
     }
 }
 
-void INLINE _state_ble_reenable( void )
+INLINE void _state_ble_reenable( void )
 {
     /* Re-enable the leds */
     LEDManager.leds_enable();
@@ -591,7 +638,7 @@ void INLINE _state_ble_reenable( void )
     _state_set( Connection_status::STATE_BLE_ENABLE_WAIT );
 }
 
-void INLINE _state_reset_needed( void )
+INLINE void _state_reset_needed( void )
 {
     /* Restart the device */
     reset_mcu();
@@ -679,10 +726,38 @@ void connection_state_machine ()
 /*                Keyboard Interface                */
 /****************************************************/
 
-static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi_key_t * p_key )
+static INLINE kbdapi_event_result_t kbdif_key_event_mode_unknown_process( kbdapi_key_t * p_key )
 {
-    ASSERT_DYGMA( p_instance == NULL, "Unexpected kbdif_key_event_callback p_instance - should be NULL" );
+    /* Accepting the Bluetooth pairing key when it is toggled on. */
+    if ( p_key->type != KBDAPI_KEY_TYPE_BLUETOOTH_PAIRING || p_key->toggled_on == false )
+    {
+        return KBDAPI_EVENT_RESULT_IGNORED;  /* The key is ignored */
+    }
 
+    /* Check if the keyboard is wireless */
+    if( FirmwareVersion.keyboard_is_wireless() == false )
+    {
+        /* The keyboard is not wireless - The BLE is not allowed */
+        return KBDAPI_EVENT_RESULT_IGNORED;  /* The key is ignored */
+    }
+
+    ASSERT_DYGMA( conn_state == Connection_status::STATE_CONNECTION_MODE_WAIT, "Unexpected connection state while in the Unknown connection mode" );
+
+    /* The Bluetooth pairing key was pressed while in the Unknown connection mode. Set the Forced BLE flag and trigger the BLE mode. */
+    forced_ble_flag = true;
+
+    _state_ble_enable_set();
+
+//    /* The Bluetooth pairing key was pressed while in the Unknown connection mode. Prepare the Forced BLE mode and restart system. */
+//    BleManager.force_ble_set( true );
+//
+//    _state_set( Connection_status::STATE_BLE_FORCE_SYSTEM_RESET );
+
+    return KBDAPI_EVENT_RESULT_CONSUMED;
+}
+
+static INLINE kbdapi_event_result_t kbdif_key_event_mode_ble_process( kbdapi_key_t * p_key )
+{
     if( conn_state == Connection_status::STATE_BLE_FAILED )
     {
         /* Reset the BLE connection process */
@@ -692,13 +767,49 @@ static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi
     return KBDAPI_EVENT_RESULT_IGNORED;
 }
 
+static kbdapi_event_result_t kbdif_key_event_callback( void * p_instance, kbdapi_key_t * p_key )
+{
+    kbdapi_event_result_t kbdapi_event_result = KBDAPI_EVENT_RESULT_IGNORED;
+
+    ASSERT_DYGMA( p_instance == NULL, "Unexpected kbdif_key_event_callback p_instance - should be NULL" );
+
+    switch( conn_mode )
+    {
+        case Connection_mode::CONN_MODE_UNKNOWN:
+
+            kbdapi_event_result = kbdif_key_event_mode_unknown_process( p_key );
+
+            break;
+
+        case Connection_mode::CONN_MODE_USB:
+
+            /* Currently no key action in the USB mode */
+
+            break;
+
+        case Connection_mode::CONN_MODE_BLE:
+
+            kbdapi_event_result = kbdif_key_event_mode_ble_process( p_key );
+
+            break;
+
+        default:
+
+            kbdapi_event_result = KBDAPI_EVENT_RESULT_IGNORED;
+
+            break;
+    }
+
+    return kbdapi_event_result;
+}
+
 static const kbdif_handlers_t kbdif_handlers =
 {
     .key_event_cb = kbdif_key_event_callback,
     .command_event_cb = NULL,
 };
 
-static result_t kbdif_initialize( void )
+static INLINE result_t kbdif_initialize( void )
 {
     result_t result = RESULT_ERR;
     kbdif_conf_t config;
